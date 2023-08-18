@@ -7,6 +7,12 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
+opencv-python = "^4.8.0.76"
+pyserial = "^3.5"
+numpy = "^1.25.2"
+filterpy = "1.4.5"
+scikit-image = "^0.21.0"
+lapx = "^0.5.4"
 
 
 [build-system]
