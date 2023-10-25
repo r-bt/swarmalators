@@ -3,6 +3,7 @@ from ._video_stream import VideoStream, CameraControls, CameraSpec
 from .util._c930e import apply_settings
 import numpy as np
 
+CONTOUR_DISTANCE_THRESHOLD = 350
 
 class DirectionFinder:
     """
@@ -40,9 +41,14 @@ class DirectionFinder:
     def __del__(self):
         self.stream.stop()
 
+    def stop(self):
+        self.stream.stop()
+
     def find_sphero_direction(self):
         """
         Find the direction of a single sphero
+
+        We find the direction from the x-axis counter clockwise
         """
         frame = self._get_frame()
 
@@ -57,18 +63,34 @@ class DirectionFinder:
 
         contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
 
-        # Get two largest contours
-        contour_base, contour_head = contours[:2]
+        # Get largest contour (this is the base)
+        contour_base = contours[0]
 
         # Get the center of the base contour
         M_base = cv2.moments(contour_base)
         cX_base = M_base["m10"] / M_base["m00"]
         cY_base = M_base["m01"] / M_base["m00"]
 
-        # Get the center of the head contour
-        M_head = cv2.moments(contour_head)
-        cX_head = M_head["m10"] / M_head["m00"]
-        cY_head = M_head["m01"] / M_head["m00"]
+        # Find the largest contour within a certain distance (this is the head)
+
+        for contour in contours[1:]:
+            # Get the center of the head contour
+            M_head = cv2.moments(contour)
+            cX_head = M_head["m10"] / M_head["m00"]
+            cY_head = M_head["m01"] / M_head["m00"]
+            # Check distance between this and the base contour
+            if (cX_head - cX_base)**2 + (cY_head - cY_base)**2 < CONTOUR_DISTANCE_THRESHOLD:
+                break
+        else:
+            print("Failed to find head contour")
+            
+            while True:
+                frame2 = self.stream.read()
+                cv2.imshow("Frame", frame2)
+
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+            return None
 
         # Calculate the direction vector from the base to the head
         direction_vector = np.array([cX_head - cX_base, cY_base - cY_head])
@@ -80,96 +102,36 @@ class DirectionFinder:
         if angle_degrees < 0:
             angle_degrees += 360
 
-        print(angle_degrees)
+        # image = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
-        image = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        # text = f"Angle: {angle_degrees:.2f} degrees"
+        # cv2.putText(
+        #     image,
+        #     text,
+        #     (int(cX_head) + 10, int(cY_head) + 10),
+        #     cv2.FONT_HERSHEY_SIMPLEX,
+        #     0.5,
+        #     (255, 0, 255),
+        #     2,
+        # )
 
-        # # Get the center of the minimum area rect
-        # rect = cv2.minAreaRect(contour)
-        # minRectX = rect[0][0]
-        # minRectY = rect[0][1]
+        # cv2.line(
+        #     image,
+        #     (int(cX_base), int(cY_base)),
+        #     (int(cX_head), int(cY_head)),
+        #     (255, 0, 0),
+        #     2,
+        # )
 
-        # cv2.circle(image, (int(rect[0][0]), int(rect[0][1])), 2, (0, 0, 255), -1)
+        # while True:
+        #     frame2 = self.stream.read()
+        #     cv2.imshow("Lines and Intersection", image)
+        #     cv2.imshow("Frame", frame2)
 
-        # # Get the center of the contour
-        # M = cv2.moments(contour)
-        # cX = M["m10"] / M["m00"]
-        # cY = M["m01"] / M["m00"]
+        #     if cv2.waitKey(1) & 0xFF == ord("q"):
+        #         break
 
-        # cv2.circle(image, (int(cX), int(cY)), 2, (255, 0, 0), -1)
-
-        # direction_vector = np.array([minRectX - cX, cY - minRectY])
-
-        # print(direction_vector)
-
-        # angle_radians = np.arctan2(direction_vector[1], direction_vector[0])
-
-        # angle_degrees = np.degrees(angle_radians)
-
-        # if angle_degrees < 0:
-        #     angle_degrees += 360
-
-        # print(angle_degrees)
-
-        cv2.imshow("Frame", image)
-        cv2.waitKey(1)
-
-        return 0
-
-        # Get polygon approximation
-        approx = self._approx_contour_as_poly(contour)
-
-        # Get the largest line (this is the base of the T)
-        max_line = self._get_longest_line(approx)
-
-        if max_line is None:
-            return
-
-        # Get the longest perpendicualr line (this is the top of the T)
-        max_perpendicular_line = self._get_longest_perpendicular_line(approx, max_line)
-
-        if max_perpendicular_line is None:
-            return
-
-        # Calculate the angle between the perpendicular line and the x-axis
-
-        angle_radians = np.arctan2(max_perpendicular_line[1], max_perpendicular_line[0])
-
-        # Convert the angle to degrees
-        angle_degrees = np.degrees(angle_radians)
-
-        if angle_degrees < 0:
-            angle_degrees += 360
-
-        # DEBUG: Draw the lines on the frame
-        image = frame.copy()
-
-        empty = np.zeros_like(image)
-
-        text = f"Angle: {angle_degrees:.2f} degrees"
-        cv2.putText(
-            image,
-            text,
-            (max_line[0][0], max_line[0][1]),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            2,
-        )
-
-        cv2.line(image, max_line[0], max_line[1], (255, 0, 0), 2)
-
-        # Draw approx in empty
-        cv2.drawContours(empty, [approx], 0, (255, 255, 255), 2)
-
-        cv2.imshow("Lines and Intersection", image)
-        cv2.imshow("Approx", empty)
-
-        cv2.waitKey(1)
-
-        # if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
-
-        return angle_degrees
+        return int(angle_degrees)
 
     def find_sphero(self):
         """
@@ -183,10 +145,12 @@ class DirectionFinder:
         """
         # Attempt this 10 times
         box = None
-        stream = VideoStream(0).start()
 
         for _ in range(0, 75):
-            frame = stream.read()
+            frame = self.stream.read()
+
+            if frame is None:
+                continue
 
             processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             processed_frame = cv2.GaussianBlur(processed_frame, (21, 21), 0)
@@ -213,6 +177,28 @@ class DirectionFinder:
             print("Failed to find color")
 
         return box
+    
+    def debug_show_boxes(self, boxes):
+
+        while True:
+
+            frame = self.stream.read()
+
+            for box in boxes:
+                if box is None:
+                    continue
+
+                x, y, x_2, y_2 = box
+
+                w = x_2 - x
+                h = y_2 - y
+
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            cv2.imshow("Frame", frame)
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
     """
     Private member functions
@@ -247,11 +233,10 @@ class DirectionFinder:
             )
 
         processed_frame = cv2.cvtColor(smoothed_frame, cv2.COLOR_BGR2GRAY)
-        processed_frame = cv2.threshold(processed_frame, 195, 255, cv2.THRESH_BINARY)[1]
+        processed_frame = cv2.threshold(processed_frame, 70, 255, cv2.THRESH_BINARY)[1]
+
         processed_frame = cv2.erode(processed_frame, None, iterations=1)
         processed_frame = cv2.dilate(processed_frame, None, iterations=1)
-        # processed_frame = cv2.erode(processed_frame, None, iterations=5)
-        # processed_frame = cv2.dilate(processed_frame, None, iterations=2)
 
         return processed_frame
 

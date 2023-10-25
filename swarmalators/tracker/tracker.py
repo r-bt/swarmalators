@@ -214,9 +214,6 @@ class SpheroTracker:
 class Tracker:
     """
     Manager Class. Handles creating tracker process and relying positions back
-
-    Attributes:
-        num_spheros: The number of Spheros to track
     """
 
     def __init__(self) -> None:

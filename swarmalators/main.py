@@ -1,52 +1,63 @@
-import serial
 import time
 from tracker import Tracker, DirectionFinder
+from nRFSwarmalator import nRFSwarmalator
 import pdb
 import numpy as np
 import colorsys
 import os
 
 ## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER
-PORT = "/dev/tty.usbmodem0010502148741"
+PORT = "/dev/tty.usbmodem0010500746993"
 
 
-def init_spheros(ser, tracker):
+def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
     boxes = []
 
-    x = 3
-    while x > 0:
-        ser.write(bytearray([1]))
+    swarmalator.set_mode(1)
 
-        try:
-            data = ser.readline()
-        except serial.SerialException:
-            print("Caught exception!")
-            ser.close()
-            ser = serial.Serial(PORT, 115200, timeout=5)
-            data = ser.readline()
+    remaining_spheros = 15
+    while remaining_spheros > 0: 
+        swarmalator.matching_orientation()
 
-        if len(data) < 1:
-            print("No data recevied!")
+        time.sleep(0.75) # Setting up the arrow animation takes time
+
+        """
+        Correct the orientation
+        """
+
+        while True:
+            direction = finder.find_sphero_direction()
+
+            if direction is None:
+                continue
+
+            heading = direction - 90
+
+            print(heading)
+
+            if heading < 0:
+                heading += 360
+
+            swarmalator.matching_correct_heading(heading)
+
             break
 
-        if data[0] != 0x8D:
-            print("Invalid packet")
-            print(data)
-            break
+        """
+        Get the bounding box to initalize the tracker
+        """
 
-        x = data[1]
+        boxes.append(finder.find_sphero())
 
-        print("Remaining: ", x)
+        """
+        Increment sphero count
+        """
 
-        time.sleep(0.2)
+        remaining_spheros -= 1
 
-        box = tracker.find_single_sphero()
-
-        boxes.append(box)
-
-        ser.reset_input_buffer()
-
-    ser.write(bytearray([0]))
+        if (remaining_spheros > 0):
+            swarmalator.matching_next_sphero()
+        
+    swarmalator.set_mode(0)
 
     return boxes
 
@@ -79,46 +90,104 @@ def angles_to_rgb(angles_rad):
 
 
 def main():
+    # Get the tracker
     direction_finder = DirectionFinder()
 
-    ser = serial.Serial(PORT, 115200, timeout=5)  # open serial port
+    # # Open connection to nRFSwarmalator
+    swarmalator = nRFSwarmalator(PORT)
 
-    ser.close()
-    ser.open()
-    if ser.isOpen():
-        print(ser.portstr, ":connection successful.")
-    else:
-        print("Error opening serial port")
-        return
+    boxes = init_spheros(swarmalator, direction_finder)
+
+    # swarmalator.set_mode(2)
+
+    # angle = 0
+    # while True:
+    #     angle += 1
+    #     angle %= 360
+
+    #     rgb = colorsys.hsv_to_rgb(angle / 360, 1, 1)
+
+    #     rgb = [int(x * 255) for x in rgb]
+
+    #     swarmalator.colors_set_colors([rgb for _ in range(15)])
+
+    # swarmalator.colors_set_colors()
+
+    # swarmalator.mode = 1
+
+    # while True:
+        # swarmalator.set_mode(1)
+
+    # swarmalator.matching_orientation()
+
+    # swarmalator.matching_orientation()
+# 
+        # swarmalator.matching_correct_heading(0)
+
+        # time.sleep(1)
+
+    # # Get inital boxes and directions of spheros
+    # boxes = init_spheros(swarmalator, direction_finder)
+
+    direction_finder.debug_show_boxes(boxes)
+
+    # Release camera and transfer to tracking
+    direction_finder.stop()
+
+    # tracker = Tracker()
+
+    # tracker.start_tracking_objects(len(boxes), boxes)
+
+    # while True:
+    #     tracker.get_positions()
+    
+    # ser.write(bytearray([0x8d, 0x01, 0x01, 0x0a]))
+
+    # time.sleep(1)
+
+    # ser.write(bytearray([0x8d, 0x02, 0x0a]))
+    
+    # ser.write(bytearray([0x01]))
+
+    # while True:
+    #     print("Sending...")
+    #     ser.write(bytearray([0x8d, 0x01, 0x0a]))
+    #     # ser.write(bytearray([0x8d, 0x02, 0x0a]))
+
+    #     time.sleep(1)
+
+        # ser.write(bytearray([0x8d, 0x03, 0x0a]))
+
+        # time.sleep(5)
 
     # box = direction_finder.find_sphero()
-    while True:
-        direction = direction_finder.find_sphero_direction()
-        continue
+    # while True:
+    #     direction = direction_finder.find_sphero_direction()
 
-        # if direction is None:
-        #     continue
+    #     if direction is None:
+    #         continue
 
-        heading = 120
+    #     heading = direction - 90
 
-        # print(direction)
-        # print(heading)
+    #     if heading < 0:
+    #         heading += 360
 
-        if heading < 0:
-            heading += 360
+    #     # Split the angle into two bytes
+    #     byte1 = heading // 256  # Most significant byte
+    #     byte2 = heading % 256  # Least significant byte
 
-        try:
-            data = bytearray([heading]) + b"\n"
-        except:
-            continue
+    #     print(direction)
+    #     print(heading)
 
-        print(data)
+    #     data = bytearray([byte1, byte2]) + b"\n"
 
-        ser.write(data)
+    #     print(data)
 
-        time.sleep(0.2)
+    #     ser.write(data)
 
-        break
+    #     time.sleep(0.2)
+
+    #     break
 
     # while True:
     #     direction = direction_finder.find_sphero_direction()
