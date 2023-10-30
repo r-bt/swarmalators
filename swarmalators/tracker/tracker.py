@@ -44,7 +44,7 @@ class SpheroTracker:
 
         self._sort_tracker = Sort()
 
-        if init_positions:
+        if len(init_positions) > 0:
             pos = np.array(init_positions)
 
             num_rows = pos.shape[0]
@@ -56,17 +56,20 @@ class SpheroTracker:
         self._stream = VideoStream(0).start()
 
         # Get scale factors
+        print("Tracker: Initalizing frame")
         frame = self._stream.read()
+        while frame is None:
+            frame = self._stream.read()
+            
         self._height, self._width = frame.shape[:2]
 
         self._scale_factor = 2.0 / min(self._width, self._height)
 
-        # Get writer to make a video
+        print("Tracker: Initalized Frame")
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        self._writer = cv2.VideoWriter(
-            "output_video.mp4", fourcc, 20.0, (self._width, self._height)
-        )
+        # It takes some time for the camera to focus, etc
+
+
 
     """
     Private methods
@@ -113,9 +116,30 @@ class SpheroTracker:
                     2,
                 )
 
-            cv2.imshow("Frame", frame)
 
-            self._writer.write(frame)
+            if (len(active_tracks) < self._spheros):
+                print("Not enough spheros detected")
+                print([len(active_tracks), len(dets)])
+                while True:
+                    cv2.imshow("Frame", frame)
+                    cv2.imshow("Thresh", thresh)
+
+                    if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
+                        break
+
+            # if (len(active_tracks) < 15):
+            #     print([len(active_tracks), len(dets)])
+            #     while True:
+            #         cv2.imshow("Frame", frame)
+            #         cv2.imshow("Thresh", thresh)
+
+            #         if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
+            #             break
+
+            cv2.imshow("Frame", frame)
+            cv2.imshow("Thresh", thresh)
+
+            # self._writer.write(frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
                 break
@@ -204,9 +228,11 @@ class SpheroTracker:
         processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         processed_frame = cv2.GaussianBlur(processed_frame, (21, 21), 0)
 
-        processed_frame = cv2.threshold(processed_frame, 140, 255, cv2.THRESH_BINARY)[1]
-        processed_frame = cv2.erode(processed_frame, None, iterations=8)
-        processed_frame = cv2.dilate(processed_frame, None, iterations=12)
+        processed_frame = cv2.threshold(processed_frame, 40, 255, cv2.THRESH_BINARY)[1]
+        processed_frame = cv2.erode(processed_frame, None, iterations=12)
+        processed_frame = cv2.dilate(processed_frame, None, iterations=8)
+        # processed_frame = cv2.erode(processed_frame, None, iterations=8)
+        # processed_frame = cv2.dilate(processed_frame, None, iterations=12)
 
         return processed_frame
 

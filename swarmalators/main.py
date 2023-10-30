@@ -91,202 +91,29 @@ def angles_to_rgb(angles_rad):
 
 def main():
     # Get the tracker
-    direction_finder = DirectionFinder()
+    # direction_finder = DirectionFinder()
 
     # # Open connection to nRFSwarmalator
     swarmalator = nRFSwarmalator(PORT)
 
-    boxes = init_spheros(swarmalator, direction_finder)
-
-    # swarmalator.set_mode(2)
-
-    # angle = 0
-    # while True:
-    #     angle += 1
-    #     angle %= 360
-
-    #     rgb = colorsys.hsv_to_rgb(angle / 360, 1, 1)
-
-    #     rgb = [int(x * 255) for x in rgb]
-
-    #     swarmalator.colors_set_colors([rgb for _ in range(15)])
-
-    # swarmalator.colors_set_colors()
-
-    # swarmalator.mode = 1
-
-    # while True:
-        # swarmalator.set_mode(1)
-
-    # swarmalator.matching_orientation()
-
-    # swarmalator.matching_orientation()
-# 
-        # swarmalator.matching_correct_heading(0)
-
-        # time.sleep(1)
-
-    # # Get inital boxes and directions of spheros
     # boxes = init_spheros(swarmalator, direction_finder)
 
-    direction_finder.debug_show_boxes(boxes)
+    # direction_finder.debug_show_boxes(boxes)
 
-    # Release camera and transfer to tracking
-    direction_finder.stop()
+    # Release camera to transfer to tracking
+    # direction_finder.stop()
 
-    # tracker = Tracker()
+    # Start tracking
+    tracker = Tracker()
 
     # tracker.start_tracking_objects(len(boxes), boxes)
+    tracker.start_tracking_objects(15, [])
 
-    # while True:
-    #     tracker.get_positions()
-    
-    # ser.write(bytearray([0x8d, 0x01, 0x01, 0x0a]))
+    while True:
+        time.sleep(1)
 
-    # time.sleep(1)
-
-    # ser.write(bytearray([0x8d, 0x02, 0x0a]))
-    
-    # ser.write(bytearray([0x01]))
-
-    # while True:
-    #     print("Sending...")
-    #     ser.write(bytearray([0x8d, 0x01, 0x0a]))
-    #     # ser.write(bytearray([0x8d, 0x02, 0x0a]))
-
-    #     time.sleep(1)
-
-        # ser.write(bytearray([0x8d, 0x03, 0x0a]))
-
-        # time.sleep(5)
-
-    # box = direction_finder.find_sphero()
-    # while True:
-    #     direction = direction_finder.find_sphero_direction()
-
-    #     if direction is None:
-    #         continue
-
-    #     heading = direction - 90
-
-    #     if heading < 0:
-    #         heading += 360
-
-    #     # Split the angle into two bytes
-    #     byte1 = heading // 256  # Most significant byte
-    #     byte2 = heading % 256  # Least significant byte
-
-    #     print(direction)
-    #     print(heading)
-
-    #     data = bytearray([byte1, byte2]) + b"\n"
-
-    #     print(data)
-
-    #     ser.write(data)
-
-    #     time.sleep(0.2)
-
-    #     break
-
-    # while True:
-    #     direction = direction_finder.find_sphero_direction()
-
-    #     if direction is None:
-    #         continue
-
-    #     print(direction)
-    # tracker = Tracker()
-
-    # tracker.get_single_sphero_direction()
-
-    # ser = serial.Serial(PORT, 115200, timeout=5)  # open serial port
-
-    # ser.close()
-    # ser.open()
-    # if ser.isOpen():
-    #     print(ser.portstr, ":connection successful.")
-    # else:
-    #     print("Error opening serial port")
-    #     return
-
-    # # ser.write(bytearray([2]))
-
-    # angle = 0
-
-    # while True:
-    #     angle += 1
-    #     angle %= 360
-
-    #     rgb = colorsys.hsv_to_rgb(angle / 360, 1, 1)
-
-    #     rgb = [int(x * 255) for x in rgb]
-
-    #     rgbs = [item for _ in range(15) for item in rgb]
-
-    #     # print(bytearray(rgbs))
-
-    #     ser.write(bytearray(rgbs))
-
-    #     # time.sleep(0.5)
-
-    #     try:
-    #         start = time.time()
-    #         data = ser.readline()
-    #         end = time.time()
-    #         print("Took: ", end - start)
-    #     except serial.SerialException:
-    #         print("Caught exception!")
-    #         ser.close()
-    #         ser = serial.Serial(PORT, 115200, timeout=5)
-    #         data = ser.readline()
-
-    #     if len(data) < 1:
-    #         print("No data recevied!")
-    #         break
-
-    #     if data[0] != 0x8D:
-    #         print("Invalid packet")
-    #         print(data)
-    #         break
-
-    # try:
-    #     data = ser.readline()
-    # except serial.SerialException:
-    #     print("Caught exception!")
-    #     ser.close()
-    #     ser = serial.Serial(PORT, 115200, timeout=5)
-    #     data = ser.readline()
-
-    # if len(data) < 1:
-    #     print("No data recevied!")
-    #     break
-
-    # if data[0] != 0x8D:
-    #     print("Invalid packet")
-    #     print(data)
-    #     break
-
-    # x = data[1]
-
-    # print("Received: ", x)
-
-    # colors = [item for _ in range(15) for item in (255, 0, 0)]
-
-    # print(bytearray(colors))
-
-    # ser.write(bytearray(colors))
-
-    # init_positions = init_spheros(ser, tracker)
-
-    # print(init_positions)
-
-    # spheros = 15
-
-    # tracker.start_tracking_objects(spheros, init_positions)
-
-    # # Activate color state
-    # ser.write(bytearray([2]))
+    # Set the correct swarmalator mode
+    # swarmalator.set_mode(2)
 
     # """
     # Implements the Swarmalator model
@@ -298,6 +125,7 @@ def main():
     # K : int
     #     Phase coupling coefficient
     # """
+    # spheros = 15
     # K = 1
 
     # """
@@ -309,8 +137,8 @@ def main():
     # """
 
     # state = np.random.rand(spheros, 2)
-    # # state[:, 0] = np.pi
-    # # state[:, 0] = 0
+
+    # state[:, 0] = 0
     # state[:, 1] *= 2 * np.pi
 
     # now = time.time()
@@ -343,16 +171,11 @@ def main():
 
     #         colors = angles_to_rgb(state[:, 1])
 
-    #         tx = bytearray(colors.flatten())
+    #         print(colors)
 
-    #         # time.sleep(0.2)
-
-    #         print(tx)
-
-    #         ser.write(tx)
+    #         # swarmalator.colors_set_colors(colors)
     #     except:
     #         continue
-
 
 if __name__ == "__main__":
     if os.name == "posix" and os.geteuid() != 0:
