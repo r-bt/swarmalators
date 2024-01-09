@@ -1,6 +1,6 @@
 import cv2
-from ._video_stream import VideoStream, CameraControls, CameraSpec
-from .util._c930e import apply_settings
+from ._video_stream import VideoStream
+from .util._c930e import CameraControls
 import numpy as np
 
 CONTOUR_DISTANCE_THRESHOLD = 350
@@ -12,29 +12,21 @@ class DirectionFinder:
 
     MAX_HISTORY_LEN = 40
 
-    CAMERA_SPEC = CameraSpec(
-        name="Logitech Webcam C930e",
-        width=1920,
-        height=1080,
-        fps=30,
-        bandwidth_factor=1.6,
-        controls=CameraControls(
-            brightness=100,
-            contrast=128,
-            saturation=255,
-            sharpness=255,
-            zoom=102,
-            gain=64,
-            exposure_mode=1,
-            exposure_time=312,
-        ),
+    DIRECTION_CAMERA_CONTROLS = CameraControls(
+        brightness=100,
+        contrast=128,
+        saturation=255,
+        sharpness=255,
+        zoom=102,
+        gain=64,
+        exposure_time=312,
+        auto_focus=1,
+        focus=0,
     )
 
     def __init__(self):
-        # Apply settings
-        # apply_settings(self.CAMERA_SETTINGS)
         # Get camera on OpenCV
-        self.stream = VideoStream(0, self.CAMERA_SPEC).start()
+        self.stream = VideoStream(0, self.DIRECTION_CAMERA_CONTROLS).start()
         # Store history of frames for direction finding
         self.history = []
 

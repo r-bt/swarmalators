@@ -3,6 +3,7 @@ from ._video_stream import VideoStream
 import multiprocessing as mp
 from ._sort import Sort
 import numpy as np
+import time
 
 MAX_LEN = 1
 
@@ -68,8 +69,25 @@ class SpheroTracker:
         print("Tracker: Initalized Frame")
 
         # It takes some time for the camera to focus, etc
+        print("Waiting for camera to calibrate")
+        count = 0
+        while count < 100:
+            frame = self._stream.read()
 
+            if frame is None:
+                continue
 
+            thresh = self._process_frame(frame)
+
+            dets = self._detect_objects(thresh)
+
+            if (len(dets) == self._spheros):
+                count += 1
+        
+        print("Calibrated camera")
+
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self.out = cv2.VideoWriter('output.avi', fourcc, 20.0, (640,  480))
 
     """
     Private methods
@@ -80,8 +98,13 @@ class SpheroTracker:
         Track objects
         """
 
+        frame_time = 0
+        prev_frame_time = 0
+
         while self._tracking.is_set():
             frame = self._stream.read()
+            self.out.write(frame)
+
             thresh = self._process_frame(frame)
 
             dets = self._detect_objects(thresh)
@@ -116,6 +139,7 @@ class SpheroTracker:
                     2,
                 )
 
+            # We can't handle losing Spheros yet (fix in the future)    
 
             if (len(active_tracks) < self._spheros):
                 print("Not enough spheros detected")
@@ -127,19 +151,20 @@ class SpheroTracker:
                     if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
                         break
 
-            # if (len(active_tracks) < 15):
-            #     print([len(active_tracks), len(dets)])
-            #     while True:
-            #         cv2.imshow("Frame", frame)
-            #         cv2.imshow("Thresh", thresh)
+            # Calculate the fps
+            frame_time = time.time()
+            
+            fps = 1/(frame_time-prev_frame_time) 
+            prev_frame_time = frame_time 
 
-            #         if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
-            #             break
+            fps = str(int(fps))
 
+            cv2.putText(frame, fps, (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 3, (100, 255, 0), 3, cv2.LINE_AA)
+
+            # Display the image
+            
             cv2.imshow("Frame", frame)
             cv2.imshow("Thresh", thresh)
-
-            # self._writer.write(frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):  # Press 'q' to exit the loop
                 break
@@ -228,11 +253,9 @@ class SpheroTracker:
         processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         processed_frame = cv2.GaussianBlur(processed_frame, (21, 21), 0)
 
-        processed_frame = cv2.threshold(processed_frame, 40, 255, cv2.THRESH_BINARY)[1]
-        processed_frame = cv2.erode(processed_frame, None, iterations=12)
-        processed_frame = cv2.dilate(processed_frame, None, iterations=8)
-        # processed_frame = cv2.erode(processed_frame, None, iterations=8)
-        # processed_frame = cv2.dilate(processed_frame, None, iterations=12)
+        processed_frame = cv2.threshold(processed_frame, 60, 255, cv2.THRESH_BINARY)[1]
+        processed_frame = cv2.erode(processed_frame, None, iterations=16)
+        processed_frame = cv2.dilate(processed_frame, None, iterations=4)
 
         return processed_frame
 

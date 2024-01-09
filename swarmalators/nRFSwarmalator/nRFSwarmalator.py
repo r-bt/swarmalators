@@ -6,7 +6,7 @@ class nRFSwarmalator():
     def __init__(self, port):
         self.port = port
 
-        self.ser = serial.Serial(self.port, 115200, timeout=20, rtscts=False)  # open serial port
+        self.ser = serial.Serial(self.port, 115200, timeout=5, rtscts=False)  # open serial port
 
         self.ser.close()
         self.ser.open()
@@ -74,14 +74,19 @@ class nRFSwarmalator():
 
         self._send_command(bytearray([0x04, byte1, byte2]))
 
-    def colors_set_colors(self, colors: list[int]):
+    def colors_set_colors(self, colors: list[int], velocities: list[int]):
         if (self.mode != 2):
             raise RuntimeError("Mode must be COLORS to use this function")
 
         if (len(colors) != 15):
             raise RuntimeError("Colors must be a list of 15 RGB values")
         
+        if (len(velocities) != 15):
+            raise RuntimeError("Velocities must be a list of 15 velocities")
+        
         rgbs = [x for item in colors for x in item]
+        velocities = [(speed, heading // 256, heading % 256) for (speed, heading) in velocities]
+        rgbs.extend([x for item in velocities for x in item])
 
         print(rgbs)
 

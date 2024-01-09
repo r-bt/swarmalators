@@ -5,21 +5,23 @@ import pdb
 import numpy as np
 import colorsys
 import os
+from swarmalator import Swarmalator
 
 ## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER
 PORT = "/dev/tty.usbmodem0010500746993"
 
+SPHERO_SPEED_SCALE_FACTOR = 25
 
 def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
     boxes = []
 
     swarmalator.set_mode(1)
 
-    remaining_spheros = 15
+    remaining_spheros = 14
     while remaining_spheros > 0: 
         swarmalator.matching_orientation()
 
-        time.sleep(0.75) # Setting up the arrow animation takes time
+        time.sleep(1.25) # Setting up the arrow animation takes time
 
         """
         Correct the orientation
@@ -61,16 +63,6 @@ def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
 
     return boxes
 
-
-# def non_blocking_input(prompt=''):
-#     sys.stdout.write(prompt)
-#     sys.stdout.flush()
-#     rlist, _, _ = select.select([sys.stdin], [], [], 0)
-#     if rlist:
-#         return sys.stdin.readline().rstrip()
-#     return None
-
-
 def angles_to_rgb(angles_rad):
     # Convert the angles to hue values (ranges from 0.0 to 1.0 in the HSV color space)
     hues = angles_rad / (2 * np.pi)
@@ -90,30 +82,31 @@ def angles_to_rgb(angles_rad):
 
 
 def main():
+    spheros = 15
     # Get the tracker
-    # direction_finder = DirectionFinder()
+    direction_finder = DirectionFinder()
 
     # # Open connection to nRFSwarmalator
-    swarmalator = nRFSwarmalator(PORT)
+    nrf_swarmalator = nRFSwarmalator(PORT)
 
-    # boxes = init_spheros(swarmalator, direction_finder)
+    boxes = init_spheros(nrf_swarmalator, direction_finder)
 
     # direction_finder.debug_show_boxes(boxes)
 
     # Release camera to transfer to tracking
-    # direction_finder.stop()
+    direction_finder.stop()
+
+    # Wait for the camera to be released
+    time.sleep(1)
 
     # Start tracking
     tracker = Tracker()
 
-    # tracker.start_tracking_objects(len(boxes), boxes)
-    tracker.start_tracking_objects(15, [])
-
-    while True:
-        time.sleep(1)
+    tracker.start_tracking_objects(len(boxes), boxes)
+    # tracker.start_tracking_objects(15, [])
 
     # Set the correct swarmalator mode
-    # swarmalator.set_mode(2)
+    nrf_swarmalator.set_mode(2)
 
     # """
     # Implements the Swarmalator model
@@ -130,52 +123,65 @@ def main():
 
     # """
     # Each agent has an inital angular frequency (column 1) and phase (column 2)
+    # Each agent has an inital position (column 1 and 2) and velocity (column 3)
 
     # We set all angular frequency to 0
 
     # We randomize all inital phases between [0, 2 * pi]
     # """
 
-    # state = np.random.rand(spheros, 2)
+    # Get the positions from the tracker
+    positions = tracker.get_positions()
+    got = False
+    while not got:
+        try:
+            positions = tracker.get_positions()
+            if positions is not None:
+                got = True
+        except:
+            continue
 
-    # state[:, 0] = 0
-    # state[:, 1] *= 2 * np.pi
+    # Init the swarmalator model
+    swarmalator = Swarmalator(spheros, 0, 1)
 
-    # now = time.time()
+    swarmalator.update(positions[:, :2])
 
-    # while True:
-    #     try:
-    #         positions = tracker.get_positions()
-    #         if positions is None:
-    #             continue
+    count = 0
 
-    #         # First we will calculate the difference of the phases
-    #         phases = state[:, 1:]
+    while True:
+        try:
+            positions = tracker.get_positions()
 
-    #         phase_sin_difference = np.sin(phases.T - phases)
+            if positions is None:
+                count += 1
+                if (count == 100):
+                    print("100 tries without position")
+                continue
 
-    #         # Now we will calculate the unit vectors
-    #         vectors = positions[:, :2][:, np.newaxis] - positions[:, :2]
-    #         pairwise_distances = np.linalg.norm(vectors, axis=2)
+            count = 0
 
-    #         mask = (pairwise_distances != 0)
+            swarmalator.update(positions[:, :2])
 
-    #         sums = np.sum(np.where(mask, phase_sin_difference / pairwise_distances, 0), axis=1)
+            phase_state = swarmalator.get_phase_state()
 
-    #         # Calculate the new state
-    #         delta_phases = state[:, 0] + (K/spheros) * sums
-    #         state[:, 1] += delta_phases * (time.time() - now)
+            velocity = swarmalator.get_velocity()
 
-    #         # Bound the values between 0 and 2 pi
-    #         state[:, 1] %= 2 * np.pi
+            velocities = []
+            for v in velocity:
+                speed = int(np.linalg.norm(v) * SPHERO_SPEED_SCALE_FACTOR)
+                heading = int(np.degrees(np.arctan2(v[1], v[0])))
+                if heading < 0:
+                    heading += 360
+                velocities.append((speed, heading))
 
-    #         colors = angles_to_rgb(state[:, 1])
+            print(velocities)
 
-    #         print(colors)
+            colors = angles_to_rgb(phase_state[:, 1])
 
-    #         # swarmalator.colors_set_colors(colors)
-    #     except:
-    #         continue
+            nrf_swarmalator.colors_set_colors(colors, velocities)
+        except Exception as e:
+            print(e)
+            # continue
 
 if __name__ == "__main__":
     if os.name == "posix" and os.geteuid() != 0:

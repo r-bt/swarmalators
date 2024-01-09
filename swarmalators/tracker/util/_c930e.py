@@ -1,22 +1,63 @@
-import uvc
+from typing import NamedTuple
+import subprocess
+import os
 
+class CameraControls(NamedTuple):
+    """
+    Available camera controls.
 
-def apply_settings(settings: dict[str, int], index=0):
-    """Applies the given settings to the camera at the given index"""
-    devices = uvc.device_list()
-    device = devices[index]
+    Attributes:
+        brightness: Brightness
+        contrast: Contrast
+        saturation: Saturation
+        sharpness: Sharpness
+        zoom: Zoom absolute control
+        gain: Gain
+        exposure_time: Absolute Exposure Time
+    """
 
-    try:
-        cap = uvc.Capture(device["uid"])
-    except:
-        print("Failed to open camera")
-        return
+    brightness: int
+    contrast: int
+    saturation: int
+    sharpness: int
+    zoom: int
+    gain: int
+    # exposure_mode: int
+    exposure_time: int
+    auto_focus: int
+    focus: int
 
-    controls_dict = dict([(c.display_name, c) for c in cap.controls])
+    CONTROLS_NAME_MAP = {
+        'exposure_time': 'exposure-time-abs',
+        'zoom': 'zoom-abs',
+        'auto_focus': 'auto-focus',
+        'focus': 'focus-abs'
+    }
 
-    print(controls_dict["Auto Focus"])
+PRODUCT = '0x046d:0x0843'
 
-    for name, value in settings.items():
-        controls_dict[name].value = value
+def apply_camera_controls(controls: CameraControls):
+    """
+    Applys UVC controls to the webcam
 
-    cap.close()
+    Args:
+        controls: The controls to apply
+    """
+
+    file_path = os.path.abspath(__file__)
+    dir_path = os.path.dirname(file_path)
+
+    path_to_exc = os.path.join(dir_path, 'uvc-util')
+
+    control_keys = controls._asdict().keys()
+
+    manual_exposure = ('gain' in control_keys or 'exposure_time' in control_keys)
+
+    subprocess.run([path_to_exc, "-V", PRODUCT, '-s', f"auto-exposure-mode={1 if manual_exposure else 8}"], stdout=subprocess.PIPE, text=True) 
+
+    for control, value in controls._asdict().items():
+
+        if control in CameraControls.CONTROLS_NAME_MAP:
+            control = CameraControls.CONTROLS_NAME_MAP[control]
+        
+        subprocess.run([path_to_exc, "-V", PRODUCT, '-s', f"{control}={value}"], stdout=subprocess.PIPE, text=True) 
