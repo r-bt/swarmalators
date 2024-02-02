@@ -1,5 +1,5 @@
 import cv2
-from ._video_stream import VideoStream
+from ._video_stream import VideoStream, CameraSpec
 from .util._c930e import CameraControls
 import numpy as np
 
@@ -24,9 +24,9 @@ class DirectionFinder:
         focus=0,
     )
 
-    def __init__(self, device: int = 0):
+    def __init__(self, device: CameraSpec):
         # Get camera on OpenCV
-        self.stream = VideoStream(device, self.DIRECTION_CAMERA_CONTROLS).start()
+        self.stream = VideoStream(device).start()
         # Store history of frames for direction finding
         self.history = []
 

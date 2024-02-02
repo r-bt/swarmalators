@@ -1,5 +1,5 @@
 import time
-from tracker import Tracker, DirectionFinder
+from tracker import Tracker, DirectionFinder, CameraSpec
 from nRFSwarmalator import nRFSwarmalator
 import pdb
 import numpy as np
@@ -95,24 +95,40 @@ def angles_to_rgb(angles_rad):
 def main():
     spheros = 15
 
-    # We have to figure out which camera is for tracking and which for recording
-    camera_index = 0
+    # # We have to figure out which camera is for tracking and which for recording
+    # camera_index = 0
 
-    while camera_index < 2:
-        cam = cv2.VideoCapture(camera_index)
-        user_input = input("Is camera {} the tracking camera? (y/n): ".format(camera_index))
-        cam.release()
-        if user_input == "y":
-            break
-        else:
-            camera_index += 1
-            if camera_index == 2:
-                print("No tracking camera found!")
-                exit(1)
+    # while camera_index < 2:
+    #     cam = cv2.VideoCapture(camera_index)
+    #     user_input = input("Is camera {} the tracking camera? (y/n): ".format(camera_index))
+    #     cam.release()
+    #     if user_input == "y":
+    #         break
+    #     else:
+    #         camera_index += 1
+    #         if camera_index == 2:
+    #             print("No tracking camera found!")
+    #             exit(1)
+
+    direction_camera = CameraSpec(
+        uid="2:1",
+        width=1920,
+        height=1080,
+        fps=30,
+        bandwidth_factor=1.6,
+    )
+
+    tracker_camera = CameraSpec(
+        uid="2:2",
+        width=1920,
+        height=1080,
+        fps=30,
+        bandwidth_factor=1.6,
+    )
 
     # Start the direction finder
 
-    direction_finder = DirectionFinder(camera_index)
+    direction_finder = DirectionFinder(direction_camera)
 
     # # Open connection to nRFSwarmalator
     nrf_swarmalator = nRFSwarmalator(spheros, PORT)
@@ -141,7 +157,7 @@ def main():
 
     print("Init tracker")
 
-    tracker.start_tracking_objects(camera_index, len(boxes), boxes)
+    tracker.start_tracking_objects(tracker_camera, len(boxes), boxes)
 
     print("Started tracking")
 

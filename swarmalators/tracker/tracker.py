@@ -1,5 +1,5 @@
 import cv2
-from ._video_stream import VideoStream
+from ._video_stream import VideoStream, CameraSpec
 import multiprocessing as mp
 # from ._sort import Sort
 from .euclid_tracker import EuclideanDistTracker
@@ -34,7 +34,7 @@ class SpheroTracker:
 
     def __init__(
         self,
-        device: int,
+        device: CameraSpec,
         spheros: int,
         tracking: mp.Event,
         positions,
@@ -289,7 +289,7 @@ class SpheroTracker:
 
     @staticmethod
     def start_tracking(
-        device: int, spheros: int, tracking: mp.Event, positions, lock, velocities, init_positions: list = []
+        device: CameraSpec, spheros: int, tracking: mp.Event, positions, lock, velocities, init_positions: list = []
     ):
         """
         Start tracking spheros
@@ -339,7 +339,7 @@ class Tracker:
         self._pos_lock = self._manager.Lock()
         self._velocities = self._manager.list()
 
-    def start_tracking_objects(self, device: int, spheros: int, init_positions: list = []):
+    def start_tracking_objects(self, device: CameraSpec, spheros: int, init_positions: list = []):
         """
         Start tracking process
         """
