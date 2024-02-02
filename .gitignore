@@ -2,3 +2,6 @@ swarmalators/tracker/__pycache__/
 swarmalators/__pycache__/
 swarmalators/nRFSwarmalator/__pycache__/
 swarmalators/tracker/util/__pycache__/
+*.avi
+*.mp4
+.DS_Store

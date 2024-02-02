@@ -10,12 +10,30 @@ from matplotlib.animation import FuncAnimation
 import time
 import colorsys
 
-positions = np.random.uniform(low=-1.0, high=1.0, size=(100, 2))
-# positions = np.array([[0.25, 0], [0.0, 0.0]])
+agent_count = 5
 
-swarm = sw.Swarmalator(100, 0, 1)
+positions = np.random.uniform(low=-0.5, high=0.5, size=(agent_count, 2))
 
-# swarm.update(positions)
+# positions[:, 1] = 0
+
+# positions = np.array([[-3.85416667e-01,  6.04166667e-02],
+#                 [-2.60416667e-01, -3.83333333e-01],
+#                 [-1.70833333e-01, -4.79166667e-02],
+#                 [ 1.08333333e-01, -1.43750000e-01],
+#                 [-1.45833333e-02, -4.79166667e-02],
+#                 [-2.08333333e-01, -2.12500000e-01],
+#                 [-3.45833333e-01, -9.58333333e-02],
+#                 [ 2.29166667e-01, -2.52083333e-01],
+#                 [-6.45833333e-02, -3.97916667e-01],
+#                 [-4.20833333e-01, -2.45833333e-01],
+#                 [ 7.29166667e-02, -3.00000000e-01],
+#                 [-5.20833333e-02, -1.95833333e-01],
+#                 [-2.08333333e-03,  2.14583333e-01],
+#                 [-1.00000000e-01,  8.75000000e-02],
+#                 [ 1.33333333e-01,  1.66666667e-02]])
+
+swarm = sw.Swarmalator(agent_count, 1, 1)
+# swarm.update(positions[:, :2])
 
 # print(swarm.get_velocity())
 
@@ -37,23 +55,26 @@ def angles_to_rgb(angles_rad):
     return rgb_colors
 
 def plot_swarm():
+    global now
     fig, ax = plt.subplots()
 
     def update(frame):
         global positions
         global now
-        # Update the model
+        # # Update the model
         swarm.update(positions)
-        # Update position based on previous velocity
+        # # Update position based on previous velocity
         positions += swarm.get_velocity() * (time.time() - now)
-        # positions = np.clip(positions, -1, 1)
+        # # positions = np.clip(positions, -1, 1)
 
-        print(positions)
+        # # print(swarm.get_velocity() * (time.time() - now) * 10)
+
+        # # print(positions)
 
         phase_state = swarm.get_phase_state()
         colors = angles_to_rgb(phase_state[:, 1]) / 255.0
 
-        # # Plot the positions
+        # # # Plot the positions
         ax.clear()
         ax.scatter(positions[:, 0], positions[:, 1], c=colors)
 
@@ -63,6 +84,7 @@ def plot_swarm():
         now = time.time()
 
     # Set up the animation
+    now = time.time()
     animation = FuncAnimation(fig, update, frames=200, interval=10, blit=False)
     plt.show()
 

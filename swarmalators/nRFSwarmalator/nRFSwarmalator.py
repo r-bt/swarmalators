@@ -3,8 +3,9 @@ import time
 
 class nRFSwarmalator():
 
-    def __init__(self, port):
+    def __init__(self, spheros: int, port):
         self.port = port
+        self.spheros = spheros
 
         self.ser = serial.Serial(self.port, 115200, timeout=5, rtscts=False)  # open serial port
 
@@ -70,25 +71,21 @@ class nRFSwarmalator():
         byte1 = heading // 256  # Most significant byte
         byte2 = heading % 256  # Least significant byte
 
-        print(bytearray([0x04, byte1, byte2]))
-
         self._send_command(bytearray([0x04, byte1, byte2]))
 
     def colors_set_colors(self, colors: list[int], velocities: list[int]):
         if (self.mode != 2):
             raise RuntimeError("Mode must be COLORS to use this function")
 
-        if (len(colors) != 15):
-            raise RuntimeError("Colors must be a list of 15 RGB values")
+        if (len(colors) != self.spheros):
+            raise RuntimeError("Colors must be a list of {} RGB values".format(self.spheros))
         
-        if (len(velocities) != 15):
-            raise RuntimeError("Velocities must be a list of 15 velocities")
+        if (len(velocities) != self.spheros):
+            raise RuntimeError("Must be a list of {} velocities".format(self.spheros))
         
         rgbs = [x for item in colors for x in item]
         velocities = [(speed, heading // 256, heading % 256) for (speed, heading) in velocities]
         rgbs.extend([x for item in velocities for x in item])
-
-        print(rgbs)
 
         self._send_command(bytearray([0x01, *rgbs]))
 
@@ -133,11 +130,7 @@ class nRFSwarmalator():
         """
         self.ser.reset_input_buffer()
 
-        print("Sending: ", bytearray([0x8d, *data, 0x0a]))
-
         res = self.ser.write(bytearray([0x8d, *data, 0x0a]))
-
-        print(res)
 
         data = self._receive_response()
 
@@ -145,7 +138,6 @@ class nRFSwarmalator():
             print("Error sending command!")
             exit()
         else:
-            print(data)
             return data
 
     

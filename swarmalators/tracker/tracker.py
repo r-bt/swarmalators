@@ -1,9 +1,11 @@
 import cv2
 from ._video_stream import VideoStream
 import multiprocessing as mp
-from ._sort import Sort
+# from ._sort import Sort
+from .euclid_tracker import EuclideanDistTracker
 import numpy as np
 import time
+import atexit
 
 MAX_LEN = 1
 
@@ -32,44 +34,70 @@ class SpheroTracker:
 
     def __init__(
         self,
+        device: int,
         spheros: int,
         tracking: mp.Event,
         positions,
         lock,
+        velocities,
         init_positions: list = [],
     ):
         self._spheros = spheros
         self._tracking = tracking
         self._positions = positions
         self._lock = lock
+        self._velocities = velocities
 
-        self._sort_tracker = Sort()
-
-        if len(init_positions) > 0:
-            pos = np.array(init_positions)
-
-            num_rows = pos.shape[0]
-            new_column = np.ones((num_rows, 1))
-            pos = np.hstack((pos, new_column))
-
-            self._sort_tracker.update(pos)
-
-        self._stream = VideoStream(0).start()
+        self._stream = VideoStream(device).start()
 
         # Get scale factors
-        print("Tracker: Initalizing frame")
+        self._set_scale_factor()
+
+        # It takes some time for the camera to focus, etc
+        print("Waiting for camera to calibrate")
+        self._calibrate_camera()
+        print("Calibrated camera")
+
+        # Setup and initalize tracker
+        self._euclid_tracker = EuclideanDistTracker()
+        self._initalize_tracker(init_positions)
+
+        self._init_recording()
+
+    """
+    Private methods
+    """
+
+    def _init_recording(self):
+        """
+        Initalize recording
+        """
+        # Set up video writer using FFmpeg
+        current_time = time.strftime("%Y%m%d%H%M%S")
+        output_file = f"output_{current_time}.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Change the codec as needed
+        out = cv2.VideoWriter(output_file, fourcc, 20.0, (self._width, self._height))  # Adjust parameters as needed
+        self.out = out
+
+        # Setup cleanup function
+        def cleanup():
+            out.release()
+
+        atexit.register(cleanup)
+
+    def _set_scale_factor(self):
+        """
+        Sets the scale factor so we can normalize coordinates
+        """
         frame = self._stream.read()
         while frame is None:
             frame = self._stream.read()
             
         self._height, self._width = frame.shape[:2]
 
-        self._scale_factor = 2.0 / min(self._width, self._height)
+        self._scale_factor = 8.0 / max(self._width, self._height)
 
-        print("Tracker: Initalized Frame")
-
-        # It takes some time for the camera to focus, etc
-        print("Waiting for camera to calibrate")
+    def _calibrate_camera(self):
         count = 0
         while count < 100:
             frame = self._stream.read()
@@ -83,15 +111,26 @@ class SpheroTracker:
 
             if (len(dets) == self._spheros):
                 count += 1
-        
-        print("Calibrated camera")
+            else:
+                print("Only found {} spheros".format(len(dets)))
 
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.out = cv2.VideoWriter('output.avi', fourcc, 20.0, (640,  480))
+    def _initalize_tracker(self, init_positions):
+        if len(init_positions) > 0:
+            self._euclid_tracker.init(init_positions)
+        else:
+            while True:
+                frame = self._stream.read()
 
-    """
-    Private methods
-    """
+                if frame is None:
+                    continue
+
+                thresh = self._process_frame(frame)
+
+                dets = self._detect_objects(thresh)
+
+                if (len(dets) == self._spheros):
+                    self._euclid_tracker.init(dets)
+                    break
 
     def _track_objects(self):
         """
@@ -109,35 +148,53 @@ class SpheroTracker:
 
             dets = self._detect_objects(thresh)
 
-            active_tracks = self._sort_tracker.update(dets)
+            # active_tracks = self._sort_tracker.update(dets)
+            active_tracks = []
+            try:
+                active_tracks = self._euclid_tracker.update(dets)
+            except RuntimeError as e:
+                print("Error updating tracker")
+                print(e)
+                while True:
+                    cv2.imshow("Frame", frame)
+                    cv2.imshow("Thresh", thresh)
+
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        raise RuntimeError("User quit")
 
             pos = self._update_positions(active_tracks)
 
-            sorted_indices = np.argsort(pos[:, 2])
+            # sorted_indices = np.argsort(pos[:, 2])
 
             with self._lock:
                 if len(self._positions) >= MAX_LEN:
                     self._positions.pop(0)
-                self._positions.append(pos[sorted_indices])
+                self._positions.append(pos)
 
-            for track in active_tracks:
-                cv2.rectangle(
-                    frame,
-                    (int(track[0]), int(track[1])),
-                    (int(track[2]), int(track[3])),
-                    color=(0, 255, 0),
-                    thickness=2,
-                )
+            for index, (obj_id, track) in enumerate(active_tracks):
+                if index < len(self._velocities):
+                    velocity = self._velocities[index]
 
-                cv2.putText(
-                    frame,
-                    "#{}".format(track[4]),
-                    (int(track[0]), int(track[1]) - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.9,
-                    (36, 255, 12),
-                    2,
-                )
+                    arrow_length = 40  # Adjust the arrow length as needed
+
+                    heading_radians = np.radians(velocity[1])
+
+                    # Calculate the endpoint of the arrow based on velocity and arrow_length
+                    arrow_end = (int(track[0] + arrow_length * np.cos(heading_radians)),
+                                int(track[1] + arrow_length * np.sin(-heading_radians)))
+
+                    # Draw the arrow on the frame
+                    cv2.arrowedLine(frame, (int(track[0]), int(track[1])), arrow_end, (36, 255, 12), 5)
+
+                    cv2.putText(
+                        frame,
+                        "Speed: {}, Heading: {}".format(round(velocity[0], 2), round(velocity[1], 2)),
+                        (int(track[0]), int(track[1])),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.9,
+                        (36, 255, 12),
+                        2,
+                    )
 
             # We can't handle losing Spheros yet (fix in the future)    
 
@@ -172,7 +229,7 @@ class SpheroTracker:
         print("Saving video...")
         cv2.destroyAllWindows()  # Close all OpenCV windows
         self._stream.stop()  # Stop the video stream
-        self._out.release()
+        self.out.release()
 
     def _detect_objects(self, frame):
         """
@@ -182,7 +239,7 @@ class SpheroTracker:
             frame: The frame to detect Spheros in
 
         Returns:
-            A list of detections
+            A list of detections in form [x, y, w, h]
         """
         contours = find_all_contours(frame)
         contours = sorted(contours, key=cv2.contourArea, reverse=True)
@@ -192,7 +249,7 @@ class SpheroTracker:
         dets = []
         for contour in contours[:endIndex]:
             x, y, w, h = cv2.boundingRect(contour)
-            det = np.array([x, y, x + w, y + h, 1.0])
+            det = np.array([x, y, w, h])
             dets.append(det)
 
         return np.array(dets)
@@ -202,17 +259,17 @@ class SpheroTracker:
         Update the positions of the spheros
 
         Args:
-            dets: The detections to update the positions with
+            dets: The detections to update the positions with in form [id, (x, y)]
         """
 
         pos = np.empty((len(tracks), 3))
 
         for i, track in enumerate(tracks):
             center_x, center_y = self._normalize_coordinates(
-                (track[0] + track[2]) / 2, (track[1] + track[3]) / 2
+                track[1][0], track[1][1]
             )
 
-            pos[i] = np.array([center_x, center_y, track[4]])
+            pos[i] = np.array([center_x, center_y, track[0]])
 
         return pos
 
@@ -220,6 +277,11 @@ class SpheroTracker:
         normalized_x = self._scale_factor * (x - self._width / 2)
         normalized_y = self._scale_factor * (y - self._height / 2)
         return normalized_x, -normalized_y
+    
+    def _unnormalize_coordinates(self, x, y):
+        unnormalized_x = (x / self._scale_factor) + self._width / 2
+        unnormalized_y = (-y / self._scale_factor) + self._height / 2
+        return unnormalized_x, unnormalized_y
 
     """
     Static methods
@@ -227,14 +289,14 @@ class SpheroTracker:
 
     @staticmethod
     def start_tracking(
-        spheros: int, tracking: mp.Event, positions, lock, init_positions: list = []
+        device: int, spheros: int, tracking: mp.Event, positions, lock, velocities, init_positions: list = []
     ):
         """
         Start tracking spheros
         """
         print("Starting to track!")
         sphero_tracker = SpheroTracker(
-            spheros, tracking, positions, lock, init_positions
+            device, spheros, tracking, positions, lock, velocities, init_positions
         )
 
         sphero_tracker._track_objects()
@@ -253,9 +315,11 @@ class SpheroTracker:
         processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         processed_frame = cv2.GaussianBlur(processed_frame, (21, 21), 0)
 
+        # processed_frame = cv2.adaptiveThr eshold(processed_frame, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
         processed_frame = cv2.threshold(processed_frame, 60, 255, cv2.THRESH_BINARY)[1]
-        processed_frame = cv2.erode(processed_frame, None, iterations=16)
-        processed_frame = cv2.dilate(processed_frame, None, iterations=4)
+
+        processed_frame = cv2.erode(processed_frame, None, iterations=4)
+        processed_frame = cv2.dilate(processed_frame, None, iterations=2)
 
         return processed_frame
 
@@ -273,8 +337,9 @@ class Tracker:
         self._manager = mp.Manager()
         self._positions = self._manager.list()
         self._pos_lock = self._manager.Lock()
+        self._velocities = self._manager.list()
 
-    def start_tracking_objects(self, spheros: int, init_positions: list = []):
+    def start_tracking_objects(self, device: int, spheros: int, init_positions: list = []):
         """
         Start tracking process
         """
@@ -283,10 +348,12 @@ class Tracker:
         self._tracking_process = mp.Process(
             target=SpheroTracker.start_tracking,
             args=(
+                device,
                 spheros,
                 self._tracking,
                 self._positions,
                 self._pos_lock,
+                self._velocities,
                 init_positions,
             ),
         )
@@ -300,6 +367,14 @@ class Tracker:
                 return pos
             except:
                 return None
+            
+    def set_velocities(self, velocities):
+        with self._pos_lock:
+            for i, velocity in enumerate(velocities):
+                if i >= len(self._velocities):
+                    self._velocities.append(velocity)
+                else:
+                    self._velocities[i] = velocity
 
     def cleanup(self):
         self._tracking.clear()

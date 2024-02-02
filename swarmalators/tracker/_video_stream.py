@@ -1,6 +1,8 @@
 import cv2
 from threading import Thread
 from .util._c930e import apply_camera_controls, CameraControls
+import time
+import numpy as np
 
 
 DEFAULT_CAMERA_CONTROLS = CameraControls(
@@ -22,7 +24,7 @@ class VideoStream:
         device: The device index of the camera to use.
     """
 
-    def __init__(self, device, controls: CameraControls = DEFAULT_CAMERA_CONTROLS):
+    def __init__(self, device: int, controls: CameraControls = DEFAULT_CAMERA_CONTROLS):
         self._stream = cv2.VideoCapture(device)
 
         if not self._stream.isOpened():
@@ -62,5 +64,7 @@ class VideoStream:
     def stop(self):
         """Indicate that the thread should be stopped."""
         self._stopped = True
+        # Wait a moment to avoid segfaults
+        time.sleep(0.5)
         # Release the stream
         self._stream.release()

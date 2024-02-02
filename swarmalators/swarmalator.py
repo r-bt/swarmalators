@@ -18,6 +18,8 @@ class Swarmalator:
         positions: list
             Initial positions of all the agents
         """
+        np.random.seed(0) # Debug have the same random numbers
+
         self._agents = agents
         self._K = K
         self._J = J
@@ -26,17 +28,20 @@ class Swarmalator:
 
         # Init positon state
         self.position_state = np.random.rand(self._agents, 2) 
-        self.position_state[:, 0] = 0 # Set the inherent velocities
-        self.position_state[:, 1] = 0
+        self.position_state[:, 0] = 0 # Inherent velocity in x-dir
+        self.position_state[:, 1] = 0 # Inherent velocity in y-dir
 
         self.velocity = None
         
         # Init phase state
         self.phase_state = np.random.rand(self._agents, 2)
-        self.phase_state[:, 0] = 1 # Inherent angular frequency is 0
-        self.phase_state[:, 1] *= 2 * np.pi # Inital phase is random value between [0, 2pi]
+
+        half_len = len(self.phase_state) // 2
+        self.phase_state[:half_len, 0] = 1
+        self.phase_state[half_len:, 0] = -1
         # self.phase_state[:, 0] = 0
-        # self.phase_state[:, 1] = 0
+
+        self.phase_state[:, 1] *= 2 * np.pi # Inital phase is random value between [0, 2pi]
 
         # Keep track of time between updates
         self._updated = time.time()

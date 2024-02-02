@@ -34,13 +34,14 @@ class CameraControls(NamedTuple):
         'focus': 'focus-abs'
     }
 
-PRODUCT = '0x046d:0x0843'
+LOCATION = '0x02100000' # NOTE: Change to location of your main camera
 
 def apply_camera_controls(controls: CameraControls):
     """
     Applys UVC controls to the webcam
 
     Args:
+        device_index: The index of the device to apply the controls to
         controls: The controls to apply
     """
 
@@ -53,11 +54,14 @@ def apply_camera_controls(controls: CameraControls):
 
     manual_exposure = ('gain' in control_keys or 'exposure_time' in control_keys)
 
-    subprocess.run([path_to_exc, "-V", PRODUCT, '-s', f"auto-exposure-mode={1 if manual_exposure else 8}"], stdout=subprocess.PIPE, text=True) 
+    subprocess.run([path_to_exc, "-L", LOCATION, '-s', f"auto-exposure-mode={1 if manual_exposure else 8}"], stdout=subprocess.PIPE, text=True) 
 
     for control, value in controls._asdict().items():
+
+        if 'focus' in control:
+            continue
 
         if control in CameraControls.CONTROLS_NAME_MAP:
             control = CameraControls.CONTROLS_NAME_MAP[control]
         
-        subprocess.run([path_to_exc, "-V", PRODUCT, '-s', f"{control}={value}"], stdout=subprocess.PIPE, text=True) 
+        subprocess.run([path_to_exc, "-L", LOCATION, '-s', f"{control}={value}"], stdout=subprocess.PIPE, text=True) 

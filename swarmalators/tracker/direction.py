@@ -24,9 +24,9 @@ class DirectionFinder:
         focus=0,
     )
 
-    def __init__(self):
+    def __init__(self, device: int = 0):
         # Get camera on OpenCV
-        self.stream = VideoStream(0, self.DIRECTION_CAMERA_CONTROLS).start()
+        self.stream = VideoStream(device, self.DIRECTION_CAMERA_CONTROLS).start()
         # Store history of frames for direction finding
         self.history = []
 
@@ -79,6 +79,7 @@ class DirectionFinder:
             while True:
                 frame2 = self.stream.read()
                 cv2.imshow("Frame", frame2)
+                cv2.imshow("Processed Frame", frame)
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -94,7 +95,7 @@ class DirectionFinder:
         if angle_degrees < 0:
             angle_degrees += 360
 
-        # image = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        image = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
         # text = f"Angle: {angle_degrees:.2f} degrees"
         # cv2.putText(
@@ -133,7 +134,7 @@ class DirectionFinder:
             Only one Sphero's LED matrix is on
 
         Returns:
-            The bounding box of the sphero
+            The bounding box of the sphero in form [x, y, w, h]
         """
         # Attempt this 10 times
         box = None
@@ -147,7 +148,7 @@ class DirectionFinder:
             processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             processed_frame = cv2.GaussianBlur(processed_frame, (21, 21), 0)
             processed_frame = cv2.threshold(
-                processed_frame, 150, 255, cv2.THRESH_BINARY
+                processed_frame, 130, 255, cv2.THRESH_BINARY
             )[1]
             processed_frame = cv2.erode(processed_frame, None, iterations=1)
             processed_frame = cv2.dilate(processed_frame, None, iterations=12)
@@ -161,12 +162,20 @@ class DirectionFinder:
             contour = contours[0]
 
             x, y, w, h = cv2.boundingRect(contour)
-            box = [x, y, x + w, y + h]
+            box = [x, y, w, h]
 
             break
 
         if box == None:
-            print("Failed to find color")
+            print("Failed to find a sphero")
+            while True:
+                cv2.imshow("Frame", frame)
+                cv2.imshow("Processed frame", processed_frame)
+
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+
+            raise RuntimeError("Failed to find a sphero")
 
         return box
     
@@ -228,7 +237,7 @@ class DirectionFinder:
         processed_frame = cv2.threshold(processed_frame, 70, 255, cv2.THRESH_BINARY)[1]
 
         processed_frame = cv2.erode(processed_frame, None, iterations=1)
-        processed_frame = cv2.dilate(processed_frame, None, iterations=1)
+        # processed_frame = cv2.dilate(processed_frame, None, iterations=1)
 
         return processed_frame
 

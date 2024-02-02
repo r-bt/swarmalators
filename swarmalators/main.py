@@ -6,18 +6,21 @@ import numpy as np
 import colorsys
 import os
 from swarmalator import Swarmalator
+import cv2
+from simple_pid import PID
 
-## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER
+## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER FOR THE NRF5340
 PORT = "/dev/tty.usbmodem0010500746993"
 
-SPHERO_SPEED_SCALE_FACTOR = 25
+SPHERO_SPEED_SCALE_FACTOR = 30
+MIN_SPEED = 10
 
-def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
+def init_spheros(spheros: int, swarmalator: nRFSwarmalator, finder: DirectionFinder):
     boxes = []
 
     swarmalator.set_mode(1)
 
-    remaining_spheros = 14
+    remaining_spheros = spheros
     while remaining_spheros > 0: 
         swarmalator.matching_orientation()
 
@@ -25,6 +28,12 @@ def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
 
         """
         Correct the orientation
+
+        Notes:
+        1. Sphero Logo (not text) is the front
+        2. 90 degrees is the right side
+        3. 180 degrees is the back
+        4. 270 degrees is the left side
         """
 
         while True:
@@ -33,9 +42,9 @@ def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
             if direction is None:
                 continue
 
-            heading = direction - 90
+            print(direction)
 
-            print(heading)
+            heading = direction
 
             if heading < 0:
                 heading += 360
@@ -58,6 +67,8 @@ def init_spheros(swarmalator: nRFSwarmalator, finder: DirectionFinder):
 
         if (remaining_spheros > 0):
             swarmalator.matching_next_sphero()
+
+        print("Remaining spheros: {}".format(remaining_spheros))
         
     swarmalator.set_mode(0)
 
@@ -83,31 +94,60 @@ def angles_to_rgb(angles_rad):
 
 def main():
     spheros = 15
-    # Get the tracker
-    direction_finder = DirectionFinder()
+
+    # We have to figure out which camera is for tracking and which for recording
+    camera_index = 0
+
+    while camera_index < 2:
+        cam = cv2.VideoCapture(camera_index)
+        user_input = input("Is camera {} the tracking camera? (y/n): ".format(camera_index))
+        cam.release()
+        if user_input == "y":
+            break
+        else:
+            camera_index += 1
+            if camera_index == 2:
+                print("No tracking camera found!")
+                exit(1)
+
+    # Start the direction finder
+
+    direction_finder = DirectionFinder(camera_index)
 
     # # Open connection to nRFSwarmalator
-    nrf_swarmalator = nRFSwarmalator(PORT)
+    nrf_swarmalator = nRFSwarmalator(spheros, PORT)
 
-    boxes = init_spheros(nrf_swarmalator, direction_finder)
+    boxes = init_spheros(spheros, nrf_swarmalator, direction_finder)
+
+    # print(boxes)
 
     # direction_finder.debug_show_boxes(boxes)
 
     # Release camera to transfer to tracking
     direction_finder.stop()
+    print("Stopped direction finder")
 
     # Wait for the camera to be released
     time.sleep(1)
 
-    # Start tracking
-    tracker = Tracker()
-
-    tracker.start_tracking_objects(len(boxes), boxes)
-    # tracker.start_tracking_objects(15, [])
-
+    print("Setting the swarmalator mode")
     # Set the correct swarmalator mode
     nrf_swarmalator.set_mode(2)
 
+    print("Set the swarmalator mode")
+
+    # Start tracking
+    tracker = Tracker()
+
+    print("Init tracker")
+
+    tracker.start_tracking_objects(camera_index, len(boxes), boxes)
+
+    print("Started tracking")
+
+    # while True:
+        # pass
+   
     # """
     # Implements the Swarmalator model
 
@@ -141,44 +181,82 @@ def main():
         except:
             continue
 
-    # Init the swarmalator model
-    swarmalator = Swarmalator(spheros, 0, 1)
+    print(positions)
 
+    # Init the swarmalator model
+    swarmalator = Swarmalator(spheros, 1, 1)
     swarmalator.update(positions[:, :2])
 
-    count = 0
+    # count = 0
+
+    now = time.monotonic()
+
+    prev_positions = None
+
+    # Set up PID controller to control speeds
+    Kp = 40
+    Ki = 1
+    Kd = 0
+
+    pid_controllers = [PID(Kp, Ki, Kd, setpoint=0) for _ in range(spheros)]
+    for pid in pid_controllers:
+        pid.output_limits = (0, 100)
+        pid.sample_time = 0.1
 
     while True:
         try:
+            # Update and get values from swarmalator model
             positions = tracker.get_positions()
 
             if positions is None:
-                count += 1
-                if (count == 100):
-                    print("100 tries without position")
                 continue
-
-            count = 0
 
             swarmalator.update(positions[:, :2])
 
             phase_state = swarmalator.get_phase_state()
+            velocities = swarmalator.get_velocity()
 
-            velocity = swarmalator.get_velocity()
+            # Calculate the current velocity for all Spheros
+            real_velocities = np.zeros(spheros)
+            if prev_positions is not None:
+                traveled = np.linalg.norm(positions[:, :2] - prev_positions[:, :2], axis=1)
+                real_velocities = traveled / (time.monotonic() - now)
 
-            velocities = []
-            for v in velocity:
-                speed = int(np.linalg.norm(v) * SPHERO_SPEED_SCALE_FACTOR)
-                heading = int(np.degrees(np.arctan2(v[1], v[0])))
+                print("Real velocities: ", real_velocities)
+                print("Error in velocity: ", real_velocities - np.linalg.norm(velocities, axis=1))
+            
+            prev_positions = positions
+            now = time.monotonic()
+
+            # Update the PID controllers to get new velocities
+
+            to_send_velocities = []
+            for i, (controller, velocity) in enumerate(zip(pid_controllers, velocities)):
+                # Update the set point to the new desired velocity
+                controller.setpoint = np.linalg.norm(velocity)
+
+                # Update the PID controller
+                command = controller(real_velocities[i])
+
+                # Get the heading
+                heading = int(np.degrees(np.arctan2(velocity[1], velocity[0])))
+                # Sphero uses a different heading system (0 is the front, 90 is the right side, 180 is the back, 270 is the left side)
+                # Effect is that left and right are switched
+                heading = -heading
+
                 if heading < 0:
                     heading += 360
-                velocities.append((speed, heading))
 
-            print(velocities)
+                # Store the speed and heading
+                to_send_velocities.append((int(command), heading))
 
             colors = angles_to_rgb(phase_state[:, 1])
 
-            nrf_swarmalator.colors_set_colors(colors, velocities)
+            nrf_swarmalator.colors_set_colors(colors, to_send_velocities)
+
+            tracker.set_velocities([(v[0], -v[1]) for v in to_send_velocities])
+
+            print("Took: ", time.monotonic() - now)
         except Exception as e:
             print(e)
             # continue
