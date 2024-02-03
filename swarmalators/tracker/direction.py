@@ -236,7 +236,7 @@ class DirectionFinder:
         processed_frame = cv2.cvtColor(smoothed_frame, cv2.COLOR_BGR2GRAY)
         processed_frame = cv2.threshold(processed_frame, 70, 255, cv2.THRESH_BINARY)[1]
 
-        processed_frame = cv2.erode(processed_frame, None, iterations=1)
+        processed_frame = cv2.erode(processed_frame, None, iterations=2)
         # processed_frame = cv2.dilate(processed_frame, None, iterations=1)
 
         return processed_frame
