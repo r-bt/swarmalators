@@ -86,6 +86,8 @@ class VideoStream:
             uvc_name = camera_controls_mapping[control]
 
             controls_dict[uvc_name].value = value
+
+            print("Set", uvc_name, "to", controls_dict[uvc_name].value)
         
         return cam
 
