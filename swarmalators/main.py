@@ -8,6 +8,7 @@ import os
 from swarmalator import Swarmalator
 import cv2
 from simple_pid import PID
+import csv
 
 ## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER FOR THE NRF5340
 PORT = "/dev/tty.usbmodem0010500746993"
@@ -200,7 +201,7 @@ def main():
     print(positions)
 
     # Init the swarmalator model
-    swarmalator = Swarmalator(spheros, 1, 1)
+    swarmalator = Swarmalator(spheros, -1, 1)
     swarmalator.update(positions[:, :2])
 
     # count = 0
@@ -219,63 +220,72 @@ def main():
         pid.output_limits = (0, 100)
         pid.sample_time = 0.1
 
-    while True:
-        try:
-            # Update and get values from swarmalator model
-            positions = tracker.get_positions()
+    current_time = time.strftime("%Y%m%d%H%M%S")
+    output_file = f"state_{current_time}.csv"
 
-            if positions is None:
-                continue
+    with open(output_file, "w") as f:
+        writer = csv.writer(f, delimiter=",")
+        writer.writerow(["Time", *["Phase {}".format(i) for i in range(spheros)], *["Velocity {}".format(i) for i in range(spheros)]])
 
-            swarmalator.update(positions[:, :2])
+        while True:
+            try:
+                # Update and get values from swarmalator model
+                positions = tracker.get_positions()
 
-            phase_state = swarmalator.get_phase_state()
-            velocities = swarmalator.get_velocity()
+                if positions is None:
+                    continue
 
-            # Calculate the current velocity for all Spheros
-            real_velocities = np.zeros(spheros)
-            if prev_positions is not None:
-                traveled = np.linalg.norm(positions[:, :2] - prev_positions[:, :2], axis=1)
-                real_velocities = traveled / (time.monotonic() - now)
+                swarmalator.update(positions[:, :2])
 
-                print("Real velocities: ", real_velocities)
-                print("Error in velocity: ", real_velocities - np.linalg.norm(velocities, axis=1))
-            
-            prev_positions = positions
-            now = time.monotonic()
+                phase_state = swarmalator.get_phase_state()
+                velocities = swarmalator.get_velocity()
 
-            # Update the PID controllers to get new velocities
+                # Calculate the current velocity for all Spheros
+                real_velocities = np.zeros(spheros)
+                if prev_positions is not None:
+                    traveled = np.linalg.norm(positions[:, :2] - prev_positions[:, :2], axis=1)
+                    real_velocities = traveled / (time.monotonic() - now)
 
-            to_send_velocities = []
-            for i, (controller, velocity) in enumerate(zip(pid_controllers, velocities)):
-                # Update the set point to the new desired velocity
-                controller.setpoint = np.linalg.norm(velocity)
+                    print("Real velocities: ", real_velocities)
+                    print("Error in velocity: ", real_velocities - np.linalg.norm(velocities, axis=1))
+                
+                prev_positions = positions
+                now = time.monotonic()
 
-                # Update the PID controller
-                command = controller(real_velocities[i])
+                # Update the PID controllers to get new velocities
 
-                # Get the heading
-                heading = int(np.degrees(np.arctan2(velocity[1], velocity[0])))
-                # Sphero uses a different heading system (0 is the front, 90 is the right side, 180 is the back, 270 is the left side)
-                # Effect is that left and right are switched
-                heading = -heading
+                to_send_velocities = []
+                for i, (controller, velocity) in enumerate(zip(pid_controllers, velocities)):
+                    # Update the set point to the new desired velocity
+                    controller.setpoint = np.linalg.norm(velocity)
 
-                if heading < 0:
-                    heading += 360
+                    # Update the PID controller
+                    command = controller(real_velocities[i])
 
-                # Store the speed and heading
-                to_send_velocities.append((int(command), heading))
+                    # Get the heading
+                    heading = int(np.degrees(np.arctan2(velocity[1], velocity[0])))
+                    # Sphero uses a different heading system (0 is the front, 90 is the right side, 180 is the back, 270 is the left side)
+                    # Effect is that left and right are switched
+                    heading = -heading
 
-            colors = angles_to_rgb(phase_state[:, 1])
+                    if heading < 0:
+                        heading += 360
 
-            nrf_swarmalator.colors_set_colors(colors, to_send_velocities)
+                    # Store the speed and heading
+                    to_send_velocities.append((int(command), heading))
 
-            tracker.set_velocities([(v[0], -v[1]) for v in to_send_velocities])
+                colors = angles_to_rgb(phase_state[:, 1])
 
-            print("Took: ", time.monotonic() - now)
-        except Exception as e:
-            print(e)
-            # continue
+                nrf_swarmalator.colors_set_colors(colors, to_send_velocities)
+
+                tracker.set_velocities([(v[0], -v[1]) for v in to_send_velocities])
+
+                print("Took: ", time.monotonic() - now)
+
+                writer.writerow([time.monotonic(), *phase_state[:, 1], *velocities])
+            except Exception as e:
+                print(e)
+                # continue
 
 if __name__ == "__main__":
     if os.name == "posix" and os.geteuid() != 0:
