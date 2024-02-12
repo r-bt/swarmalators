@@ -1,4 +1,4 @@
-from tracker import VideoStream, CameraSpec, CameraControls
+from tracker import VideoStream, CameraSpec
 import cv2
 import time
 

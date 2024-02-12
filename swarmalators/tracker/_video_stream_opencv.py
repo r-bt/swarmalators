@@ -5,19 +5,6 @@ import time
 import numpy as np
 from ._video_stream import CameraSpec
 import subprocess
-
-DEFAULT_CAMERA_CONTROLS = CameraControls(
-    brightness=150,
-    contrast=128,
-    saturation=255,
-    sharpness=255,
-    zoom=104,
-    gain=124,
-    exposure_time=624,
-    auto_focus=0,
-    focus=0
-)
-
 class VideoStream:
     """A CV2 VideoStream wrapper for threading.
 

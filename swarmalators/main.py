@@ -161,9 +161,6 @@ def main():
     tracker.start_tracking_objects(tracker_camera, len(boxes), boxes)
 
     print("Started tracking")
-
-    # while True:
-        # pass
    
     # """
     # Implements the Swarmalator model
