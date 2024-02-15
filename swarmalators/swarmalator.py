@@ -27,21 +27,27 @@ class Swarmalator:
         self._B = B
 
         # Init positon state
-        self.position_state = np.random.rand(self._agents, 2) 
-        self.position_state[:, 0] = 0 # Inherent velocity in x-dir
-        self.position_state[:, 1] = 0 # Inherent velocity in y-dir
+        self.inherent_velocity = np.random.rand(self._agents, 2) 
+        self.inherent_velocity[:, 0] = 0 # Inherent velocity in x-dir
+        self.inherent_velocity[:, 1] = 0 # Inherent velocity in y-dir
 
-        self.velocity = None
+        self.velocity = np.zeros((self._agents, 2))
+
+        half_len = self._agents // 2
+
+        self.c = np.random.rand(self._agents, 1)
+        self.c[:half_len, 0] = 1
+        self.c[half_len:, 0] = -1
         
-        # Init phase state
+        # Init phase state (0 is natural freuqnecy, 1 is phase)
         self.phase_state = np.random.rand(self._agents, 2)
 
-        half_len = len(self.phase_state) // 2
+        # half_len = len(self.phase_state) // 2
         self.phase_state[:half_len, 0] = 1
         self.phase_state[half_len:, 0] = -1
-        # self.phase_state[:, 0] = 0
-
-        self.phase_state[:, 1] *= 2 * np.pi # Inital phase is random value between [0, 2pi]
+        # self.phase_state[:, 0] = 1/
+        # self.phase_state[:, 1] *= 2*np.pi
+        # self.phase_state[:, 1] = np.linspace(0, 2 * np.pi, self._agents, endpoint=False)
 
         # Keep track of time between updates
         self._updated = time.time()
@@ -49,39 +55,48 @@ class Swarmalator:
     def update(self, positions):
         """
         Perform one tick update of swarmalator model
+
+        Note: We perform using matrix multiplication since numpy supports vectorization and is faster than for loops
         """
 
-        phases = self.phase_state[:, 1:]
-
-        phase_sin_difference = np.sin(phases.T - phases) 
-        phase_cos_difference = np.cos(phases.T - phases)
-
-        # Now we get get vectors between each agent and calculate magnitudes
+        # Calculate x_j - x_i and |x_j = x_i|
         vectors = positions[:, :2] - positions[:, :2][:, np.newaxis]
-        pairwise_distances = np.linalg.norm(vectors, axis=2)
+        distances = np.linalg.norm(vectors, axis=2)
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            phase_sum = np.where(pairwise_distances != 0, phase_sin_difference / pairwise_distances, 0)
-            position_sum = np.where(
-                pairwise_distances[:, :, np.newaxis] != 0,
-                (vectors / pairwise_distances[:, :, np.newaxis]) * (self._A + self._J * phase_cos_difference[:, :, np.newaxis]) - self._B * (vectors / (np.square(pairwise_distances)[:, :, np.newaxis])),
-                0
-            )
+        np.fill_diagonal(distances, 1e-6) # Avoid division by zero
 
-        phase_sum = np.sum(phase_sum, axis=1)
-        position_sum = np.sum(position_sum, axis=1)
+        # Calculate the phase difference
+        # Note: Multiply by -1 since we are doing x_i = x_j but we want x_j - x_i
+        phase_difference = -1 * np.subtract.outer(self.phase_state[:, 1], self.phase_state[:, 1])
 
-        delta_phases = self.phase_state[:, 0] + (self._K/self._agents) * phase_sum
+        # Calculate Q terms
+        natural_frequencies = self.phase_state[:, 0]
+        phase_normalized = natural_frequencies / np.absolute(natural_frequencies)
+        phase_normalized = np.nan_to_num(phase_normalized)
 
-        delta_position = self.position_state + (1/self._agents) * position_sum
+        Q_x = (np.pi / 2) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
+        Q_theta = (np.pi / 4) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
 
-        self.phase_state[:, 1] += delta_phases * (time.time() - self._updated)
+        # Calculate cos and sin terms
 
-        self.velocity = delta_position
+        phase_cos_difference = np.cos(phase_difference - Q_x)
+        phase_sin_difference = np.sin(phase_difference - Q_theta)
+
+        # Calculate velocity contributions
+        velocity_contributions = (self._A + self._J * phase_cos_difference[:, :, np.newaxis]) * vectors / distances[:, :, np.newaxis] - self._B * vectors / np.square(distances[:, :, np.newaxis])
+
+        # Calculate chiral contribution
+        chiral_contribtuion = self.c * np.stack([np.cos(self.phase_state[:, 1] + np.pi/2), np.sin(self.phase_state[:, 1] + np.pi / 2)], axis=1)
+
+        # Calculate velocity and delta_phase
+        velocity = chiral_contribtuion + 1/self._agents * np.sum(velocity_contributions, axis=1)
+        delta_phase = self.phase_state[:, 0] + (self._K / self._agents) * np.sum(phase_sin_difference / distances, axis=1)
+
+        # Update phase and velocity
+        self.phase_state[:, 1] += delta_phase * (time.time() - self._updated)
+        self.velocity = velocity
 
         self._updated = time.time()
-
-        # Bound the values between 0 and 2 pi
         self.phase_state[:, 1] %= 2 * np.pi
     
     def get_phase_state(self):
@@ -89,6 +104,8 @@ class Swarmalator:
     
     def get_velocity(self):
         return self.velocity
+
+
 
 
 
