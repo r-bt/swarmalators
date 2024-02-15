@@ -9,9 +9,11 @@ from swarmalator import Swarmalator
 import cv2
 from simple_pid import PID
 import csv
+import os
 
 ## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER FOR THE NRF5340
-PORT = "/dev/tty.usbmodem0010500746993"
+is_windows = os.name == 'nt'
+PORT = "/dev/tty.usbmodem0010500746993" if not is_windows else 'COM7'
 
 SPHERO_SPEED_SCALE_FACTOR = 30
 MIN_SPEED = 10
