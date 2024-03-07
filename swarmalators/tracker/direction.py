@@ -68,6 +68,10 @@ class DirectionFinder:
         for contour in contours[1:]:
             # Get the center of the head contour
             M_head = cv2.moments(contour)
+
+            if M_head["m00"] == 0:
+                M_head["m00"] = 0.1
+
             cX_head = M_head["m10"] / M_head["m00"]
             cY_head = M_head["m01"] / M_head["m00"]
             # Check distance between this and the base contour
@@ -234,9 +238,9 @@ class DirectionFinder:
             )
 
         processed_frame = cv2.cvtColor(smoothed_frame, cv2.COLOR_BGR2GRAY)
-        processed_frame = cv2.threshold(processed_frame, 70, 255, cv2.THRESH_BINARY)[1]
+        processed_frame = cv2.threshold(processed_frame, 60, 255, cv2.THRESH_BINARY)[1]
 
-        processed_frame = cv2.erode(processed_frame, None, iterations=2)
+        processed_frame = cv2.erode(processed_frame, None, iterations=1)
         # processed_frame = cv2.dilate(processed_frame, None, iterations=1)
 
         return processed_frame

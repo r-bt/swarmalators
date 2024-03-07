@@ -200,7 +200,7 @@ def main():
     print(positions)
 
     # Init the swarmalator model
-    swarmalator = Swarmalator(spheros, -1, 1)
+    swarmalator = Swarmalator(spheros, 0.5, 1)
     swarmalator.update(positions[:, :2])
 
     # count = 0
@@ -210,7 +210,7 @@ def main():
     prev_positions = None
 
     # Set up PID controller to control speeds
-    Kp = 40
+    Kp = 50
     Ki = 1
     Kd = 0
 
@@ -224,7 +224,7 @@ def main():
 
     with open(output_file, "w") as f:
         writer = csv.writer(f, delimiter=",")
-        writer.writerow(["Time", *["Phase {}".format(i) for i in range(spheros)], *["Velocity {}".format(i) for i in range(spheros)]])
+        writer.writerow(["Time", *["Phase {}".format(i) for i in range(spheros)], *["Position {}".format(i) for i in range(spheros)]])
 
         while True:
             try:
@@ -244,9 +244,6 @@ def main():
                 if prev_positions is not None:
                     traveled = np.linalg.norm(positions[:, :2] - prev_positions[:, :2], axis=1)
                     real_velocities = traveled / (time.monotonic() - now)
-
-                    print("Real velocities: ", real_velocities)
-                    print("Error in velocity: ", real_velocities - np.linalg.norm(velocities, axis=1))
                 
                 prev_positions = positions
                 now = time.monotonic()
@@ -281,7 +278,7 @@ def main():
 
                 print("Took: ", time.monotonic() - now)
 
-                writer.writerow([time.monotonic(), *phase_state[:, 1], *velocities])
+                writer.writerow([time.monotonic(), *phase_state[:, 1], *positions[:, :2]])
             except Exception as e:
                 print(e)
                 # continue

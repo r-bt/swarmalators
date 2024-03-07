@@ -154,6 +154,8 @@ class SpheroTracker:
                 active_tracks = self._euclid_tracker.update(dets)
             except RuntimeError as e:
                 print("Error updating tracker")
+                self._stream.stop()  # Stop the video stream
+                self.out.release()
                 print(e)
                 while True:
                     cv2.imshow("Frame", frame)

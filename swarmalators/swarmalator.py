@@ -36,18 +36,21 @@ class Swarmalator:
         half_len = self._agents // 2
 
         self.c = np.random.rand(self._agents, 1)
-        self.c[:half_len, 0] = 1
-        self.c[half_len:, 0] = -1
+
+        self._chiral = False # Whether to do chiral behaviours
+
+        self.c[:half_len, 0] = 0.5
+        self.c[half_len:, 0] = -0.5
         
         # Init phase state (0 is natural freuqnecy, 1 is phase)
         self.phase_state = np.random.rand(self._agents, 2)
 
         # half_len = len(self.phase_state) // 2
-        self.phase_state[:half_len, 0] = 1
-        self.phase_state[half_len:, 0] = -1
+        self.phase_state[:half_len, 0] = 0
+        self.phase_state[half_len:, 0] = 0
         # self.phase_state[:, 0] = 1/
         # self.phase_state[:, 1] *= 2*np.pi
-        # self.phase_state[:, 1] = np.linspace(0, 2 * np.pi, self._agents, endpoint=False)
+        self.phase_state[:, 1] = np.linspace(0, 2 * np.pi, self._agents, endpoint=False)
 
         # Keep track of time between updates
         self._updated = time.time()
@@ -77,6 +80,10 @@ class Swarmalator:
         Q_x = (np.pi / 2) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
         Q_theta = (np.pi / 4) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
 
+        if not self._chiral:
+            Q_x = 0
+            Q_theta = 0
+
         # Calculate cos and sin terms
 
         phase_cos_difference = np.cos(phase_difference - Q_x)
@@ -88,9 +95,14 @@ class Swarmalator:
         # Calculate chiral contribution
         chiral_contribtuion = self.c * np.stack([np.cos(self.phase_state[:, 1] + np.pi/2), np.sin(self.phase_state[:, 1] + np.pi / 2)], axis=1)
 
+        if not self._chiral:
+            chiral_contribtuion = 0
+
         # Calculate velocity and delta_phase
         velocity = chiral_contribtuion + 1/self._agents * np.sum(velocity_contributions, axis=1)
         delta_phase = self.phase_state[:, 0] + (self._K / self._agents) * np.sum(phase_sin_difference / distances, axis=1)
+
+        print(phase_sin_difference)
 
         # Update phase and velocity
         self.phase_state[:, 1] += delta_phase * (time.time() - self._updated)
