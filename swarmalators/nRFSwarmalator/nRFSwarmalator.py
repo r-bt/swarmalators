@@ -1,13 +1,16 @@
 import serial
 import time
 
-class nRFSwarmalator():
 
-    def __init__(self, spheros: int, port):
+class nRFSwarmalator:
+
+    def __init__(self, spheros: list[str], port):
         self.port = port
-        self.spheros = spheros
+        self.spheros = len(spheros)
 
-        self.ser = serial.Serial(self.port, 115200, timeout=5, rtscts=False)  # open serial port
+        self.ser = serial.Serial(
+            self.port, 115200, timeout=5, rtscts=False
+        )  # open serial port
 
         self.ser.close()
         self.ser.open()
@@ -18,17 +21,46 @@ class nRFSwarmalator():
         if not self.ser.isOpen():
             print("Error opening serial port")
             return
-        
+
         self.mode = 0
-        
+
         # Reset to initalize state
-        self.reset()
+        result = self.reset()
+
+        # Check if we need to send Sphero names over
+        self._just_connected = False
+        if result[0] == 0x01:
+            self._just_connected = True
+            print("Initalizing Spheros")
+            for name in spheros:
+                self._send_command(name.encode("ascii"))
+
+            time.sleep(1)
+            self._send_command(bytearray([0x01, 0x01]))
+
+    def wait_for_spheros(self):
+        if not self._just_connected:
+            return
+
+        print("Waiting to connect to Spheros...", end="", flush=True)
+
+        while True:
+            data = self._receive_response()
+            print(".", end="", flush=True)
+            if data is not None:
+                print("")
+                if data[0] == 0x10:
+                    print("All Spheros connected!")
+                    break
+                else:
+                    print("Error! Spheros not connected, please restart Nordic board")
+                    exit()
 
     def reset(self):
         """
         Resets the state on the nRFSwarmalator
         """
-        self._send_command(bytearray([0x00]))
+        return self._send_command(bytearray([0x00]))
 
     def set_mode(self, mode: int):
         """
@@ -43,17 +75,17 @@ class nRFSwarmalator():
         self.mode = mode
 
     def matching_next_sphero(self):
-        if (self.mode != 1):
+        if self.mode != 1:
             raise RuntimeError("Mode must be MATCHING to use this function")
         self._send_command(bytearray([0x01]))
 
     def matching_fill_matrix(self):
-        if (self.mode != 1):
+        if self.mode != 1:
             raise RuntimeError("Mode must be MATCHING to use this function")
         self._send_command(bytearray([0x02]))
 
     def matching_orientation(self):
-        if (self.mode != 1):
+        if self.mode != 1:
             raise RuntimeError("Mode must be MATCHING to use this function")
         self._send_command(bytearray([0x03]))
 
@@ -64,7 +96,7 @@ class nRFSwarmalator():
         Args:
             heading (int): The heading to correct to
         """
-        if (self.mode != 1):
+        if self.mode != 1:
             raise RuntimeError("Mode must be MATCHING to use this function")
 
         # Split the angle into two bytes
@@ -74,17 +106,21 @@ class nRFSwarmalator():
         self._send_command(bytearray([0x04, byte1, byte2]))
 
     def colors_set_colors(self, colors: list[int], velocities: list[int]):
-        if (self.mode != 2):
+        if self.mode != 2:
             raise RuntimeError("Mode must be COLORS to use this function")
 
-        if (len(colors) != self.spheros):
-            raise RuntimeError("Colors must be a list of {} RGB values".format(self.spheros))
-        
-        if (len(velocities) != self.spheros):
+        if len(colors) != self.spheros:
+            raise RuntimeError(
+                "Colors must be a list of {} RGB values".format(self.spheros)
+            )
+
+        if len(velocities) != self.spheros:
             raise RuntimeError("Must be a list of {} velocities".format(self.spheros))
-        
+
         rgbs = [x for item in colors for x in item]
-        velocities = [(speed, heading // 256, heading % 256) for (speed, heading) in velocities]
+        velocities = [
+            (speed, heading // 256, heading % 256) for (speed, heading) in velocities
+        ]
         rgbs.extend([x for item in velocities for x in item])
 
         self._send_command(bytearray([0x01, *rgbs]))
@@ -107,17 +143,15 @@ class nRFSwarmalator():
             return None
 
         if len(data) < 1:
-            print("No data received!")
             return None
-        
+
         if data[0] != 0x8D:
             print("Invalid packet")
             print(data)
             return None
-        
+
         return data[1:-1]
 
-        
     def _send_command(self, data: bytearray):
         """
         Send command to the nRFSwarmalator
@@ -130,7 +164,7 @@ class nRFSwarmalator():
         """
         self.ser.reset_input_buffer()
 
-        res = self.ser.write(bytearray([0x8d, *data, 0x0a]))
+        res = self.ser.write(bytearray([0x8D, *data, 0x0A]))
 
         data = self._receive_response()
 
@@ -139,9 +173,3 @@ class nRFSwarmalator():
             exit()
         else:
             return data
-
-    
-    
-
-
-    

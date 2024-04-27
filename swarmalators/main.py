@@ -11,23 +11,30 @@ from simple_pid import PID
 import csv
 import os
 
-## NOTE: MODIFY TO THE PORT ON YOUR COMPUTER FOR THE NRF5340
-is_windows = os.name == 'nt'
-PORT = "/dev/tty.usbmodem0010500746993" if not is_windows else 'COM7'
+## NOTE: MODIFY TO THE PORTs ON YOUR COMPUTER FOR THE NRF5340
+is_windows = os.name == "nt"
+PORT1 = "/dev/tty.usbmodem0010500530493" if not is_windows else "COM7"
+PORT2 = "/dev/tty.usbmodem0010500746993" if not is_windows else "COM6"
 
-SPHERO_SPEED_SCALE_FACTOR = 30
-MIN_SPEED = 10
+MAX_SPHEROS_PER_SWARMALATOR = 15
 
-def init_spheros(spheros: int, swarmalator: nRFSwarmalator, finder: DirectionFinder):
+
+def init_spheros(
+    spheros: int, swarmalators: list[nRFSwarmalator], finder: DirectionFinder
+):
     boxes = []
 
-    swarmalator.set_mode(1)
+    for swarmalator in swarmalators:
+        swarmalator.set_mode(1)
 
     remaining_spheros = spheros
-    while remaining_spheros > 0: 
+    while remaining_spheros > 0:
+        swarmalator_index = (spheros - remaining_spheros) // MAX_SPHEROS_PER_SWARMALATOR
+        swarmalator = swarmalators[swarmalator_index]
+
         swarmalator.matching_orientation()
 
-        time.sleep(1.25) # Setting up the arrow animation takes time
+        time.sleep(1.25)  # Setting up the arrow animation takes time
 
         """
         Correct the orientation
@@ -44,8 +51,6 @@ def init_spheros(spheros: int, swarmalator: nRFSwarmalator, finder: DirectionFin
 
             if direction is None:
                 continue
-
-            print(direction)
 
             heading = direction
 
@@ -68,14 +73,16 @@ def init_spheros(spheros: int, swarmalator: nRFSwarmalator, finder: DirectionFin
 
         remaining_spheros -= 1
 
-        if (remaining_spheros > 0):
+        if remaining_spheros > 0:
             swarmalator.matching_next_sphero()
 
-        print("Remaining spheros: {}".format(remaining_spheros))
-        
-    swarmalator.set_mode(0)
+        print("Sphero calibrated! Remaining spheros: {}".format(remaining_spheros))
+
+    for swarmalator in swarmalators:
+        swarmalator.set_mode(0)
 
     return boxes
+
 
 def angles_to_rgb(angles_rad):
     # Convert the angles to hue values (ranges from 0.0 to 1.0 in the HSV color space)
@@ -96,7 +103,41 @@ def angles_to_rgb(angles_rad):
 
 
 def main():
-    spheros = 15
+    spheros_old = [
+        "SB-1B35",
+        "SB-F860",
+        "SB-2175",
+        "SB-369C",
+        "SB-618E",
+        "SB-6B58",
+        "SB-9938",
+        "SB-BFD4",
+        "SB-C1D2",
+        "SB-CEFA",
+        "SB-DF1D",
+        "SB-F465",
+        "SB-F479",
+        "SB-F885",
+        "SB-FCB2",
+    ]
+
+    spheros_new = [
+        "SB-31B8",
+        "SB-9CA8",
+        "SB-80C4",
+        "SB-F509",
+        "SB-5883",
+        "SB-8893",
+        "SB-D64E",
+        "SB-7D72",
+        "SB-7D7C",
+        "SB-4483",
+        "SB-378F",
+        "SB-2C58",
+        "SB-D9E2",
+        "SB-2E4B",
+        "SB-6320",
+    ]
 
     # # We have to figure out which camera is for tracking and which for recording
     # camera_index = 0
@@ -130,30 +171,32 @@ def main():
     )
 
     # Start the direction finder
-
     direction_finder = DirectionFinder(direction_camera)
 
-    # # Open connection to nRFSwarmalator
-    nrf_swarmalator = nRFSwarmalator(spheros, PORT)
+    # Start connects to Nordic boards
 
-    boxes = init_spheros(spheros, nrf_swarmalator, direction_finder)
+    nrf_swarmalator_1 = nRFSwarmalator(spheros_new, PORT1)
+    nrf_swarmalator_2 = nRFSwarmalator(spheros_old, PORT2)
 
-    # print(boxes)
+    swarmalators = [nrf_swarmalator_1, nrf_swarmalator_2]
 
-    # direction_finder.debug_show_boxes(boxes)
+    for swarmalator in swarmalators:
+        swarmalator.wait_for_spheros()
+
+    # Calibrate all the spheros
+    spheros = [*spheros_old, *spheros_new]
+
+    boxes = init_spheros(len(spheros), swarmalators, direction_finder)
 
     # Release camera to transfer to tracking
     direction_finder.stop()
-    print("Stopped direction finder")
 
     # Wait for the camera to be released
     time.sleep(1)
 
-    print("Setting the swarmalator mode")
     # Set the correct swarmalator mode
-    nrf_swarmalator.set_mode(2)
-
-    print("Set the swarmalator mode")
+    for nrf_swarmalator in swarmalators:
+        nrf_swarmalator.set_mode(2)
 
     # Start tracking
     tracker = Tracker()
@@ -163,7 +206,7 @@ def main():
     tracker.start_tracking_objects(tracker_camera, len(boxes), boxes)
 
     print("Started tracking")
-   
+
     # """
     # Implements the Swarmalator model
 
@@ -200,7 +243,7 @@ def main():
     print(positions)
 
     # Init the swarmalator model
-    swarmalator = Swarmalator(spheros, 0.5, 1)
+    swarmalator = Swarmalator(len(spheros), 0.5, 1)
     swarmalator.update(positions[:, :2])
 
     # count = 0
@@ -214,7 +257,7 @@ def main():
     Ki = 1
     Kd = 0
 
-    pid_controllers = [PID(Kp, Ki, Kd, setpoint=0) for _ in range(spheros)]
+    pid_controllers = [PID(Kp, Ki, Kd, setpoint=0) for _ in range(len(spheros))]
     for pid in pid_controllers:
         pid.output_limits = (0, 100)
         pid.sample_time = 0.1
@@ -224,7 +267,13 @@ def main():
 
     with open(output_file, "w") as f:
         writer = csv.writer(f, delimiter=",")
-        writer.writerow(["Time", *["Phase {}".format(i) for i in range(spheros)], *["Position {}".format(i) for i in range(spheros)]])
+        writer.writerow(
+            [
+                "Time",
+                *["Phase {}".format(i) for i in range(len(spheros))],
+                *["Position {}".format(i) for i in range(len(spheros))],
+            ]
+        )
 
         while True:
             try:
@@ -240,18 +289,22 @@ def main():
                 velocities = swarmalator.get_velocity()
 
                 # Calculate the current velocity for all Spheros
-                real_velocities = np.zeros(spheros)
+                real_velocities = np.zeros(len(spheros))
                 if prev_positions is not None:
-                    traveled = np.linalg.norm(positions[:, :2] - prev_positions[:, :2], axis=1)
+                    traveled = np.linalg.norm(
+                        positions[:, :2] - prev_positions[:, :2], axis=1
+                    )
                     real_velocities = traveled / (time.monotonic() - now)
-                
+
                 prev_positions = positions
                 now = time.monotonic()
 
                 # Update the PID controllers to get new velocities
 
                 to_send_velocities = []
-                for i, (controller, velocity) in enumerate(zip(pid_controllers, velocities)):
+                for i, (controller, velocity) in enumerate(
+                    zip(pid_controllers, velocities)
+                ):
                     # Update the set point to the new desired velocity
                     controller.setpoint = np.linalg.norm(velocity)
 
@@ -272,16 +325,34 @@ def main():
 
                 colors = angles_to_rgb(phase_state[:, 1])
 
-                nrf_swarmalator.colors_set_colors(colors, to_send_velocities)
+                for i, nrf_swarmalator in enumerate(swarmalators):
+                    color_selection = colors[
+                        i
+                        * MAX_SPHEROS_PER_SWARMALATOR : (i + 1)
+                        * MAX_SPHEROS_PER_SWARMALATOR
+                    ]
+
+                    velocities_selection = to_send_velocities[
+                        i
+                        * MAX_SPHEROS_PER_SWARMALATOR : (i + 1)
+                        * MAX_SPHEROS_PER_SWARMALATOR
+                    ]
+
+                    nrf_swarmalator.colors_set_colors(
+                        color_selection, velocities_selection
+                    )
 
                 tracker.set_velocities([(v[0], -v[1]) for v in to_send_velocities])
 
                 print("Took: ", time.monotonic() - now)
 
-                writer.writerow([time.monotonic(), *phase_state[:, 1], *positions[:, :2]])
+                writer.writerow(
+                    [time.monotonic(), *phase_state[:, 1], *positions[:, :2]]
+                )
             except Exception as e:
                 print(e)
                 # continue
+
 
 if __name__ == "__main__":
     if os.name == "posix" and os.geteuid() != 0:
