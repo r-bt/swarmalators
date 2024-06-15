@@ -1,7 +1,7 @@
 import sys
- 
+
 # setting path
-sys.path.append('../swarmalators')
+sys.path.append("../swarmalators")
 
 import swarmalators.swarmalator as sw
 import numpy as np
@@ -10,32 +10,14 @@ from matplotlib.animation import FuncAnimation
 import time
 import colorsys
 
-agent_count = 5
+np.random.seed(0)  # Debug have the same random numbers
 
-positions = np.random.uniform(low=-0.5, high=0.5, size=(agent_count, 2))
+agent_count = 30
 
-# positions[:, 1] = 0
+positions = np.random.uniform(low=-1, high=1, size=(agent_count, 2))
 
-# positions = np.array([[-3.85416667e-01,  6.04166667e-02],
-#                 [-2.60416667e-01, -3.83333333e-01],
-#                 [-1.70833333e-01, -4.79166667e-02],
-#                 [ 1.08333333e-01, -1.43750000e-01],
-#                 [-1.45833333e-02, -4.79166667e-02],
-#                 [-2.08333333e-01, -2.12500000e-01],
-#                 [-3.45833333e-01, -9.58333333e-02],
-#                 [ 2.29166667e-01, -2.52083333e-01],
-#                 [-6.45833333e-02, -3.97916667e-01],
-#                 [-4.20833333e-01, -2.45833333e-01],
-#                 [ 7.29166667e-02, -3.00000000e-01],
-#                 [-5.20833333e-02, -1.95833333e-01],
-#                 [-2.08333333e-03,  2.14583333e-01],
-#                 [-1.00000000e-01,  8.75000000e-02],
-#                 [ 1.33333333e-01,  1.66666667e-02]])
+swarm = sw.Swarmalator(agent_count, 0.5, 1)
 
-swarm = sw.Swarmalator(agent_count, 1, 1)
-# swarm.update(positions[:, :2])
-
-# print(swarm.get_velocity())
 
 def angles_to_rgb(angles_rad):
     # Convert the angles to hue values (ranges from 0.0 to 1.0 in the HSV color space)
@@ -54,39 +36,55 @@ def angles_to_rgb(angles_rad):
 
     return rgb_colors
 
+
+time_multipler = 5
+
+
 def plot_swarm():
     global now
+    global start
     fig, ax = plt.subplots()
 
     def update(frame):
         global positions
         global now
+        global start
+        global count
+
+        if count == 1000:
+            print("Finished!")
+            return
+
         # # Update the model
         swarm.update(positions)
+        dt = (time.time() - now) * time_multipler
+        swarm.update_phase(dt)
         # # Update position based on previous velocity
-        positions += swarm.get_velocity() * (time.time() - now)
-        # # positions = np.clip(positions, -1, 1)
 
-        # # print(swarm.get_velocity() * (time.time() - now) * 10)
-
-        # # print(positions)
+        positions += swarm.get_velocity() * dt
 
         phase_state = swarm.get_phase_state()
-        colors = angles_to_rgb(phase_state[:, 1]) / 255.0
+        colors = angles_to_rgb(phase_state) / 255.0
 
         # # # Plot the positions
         ax.clear()
         ax.scatter(positions[:, 0], positions[:, 1], c=colors)
 
-        ax.set_xlim(-2, 2)
-        ax.set_ylim(-2, 2)
+        ax.set_xlim(-3, 3)
+        ax.set_ylim(-3, 3)
 
         now = time.time()
 
+        count += 1
+
     # Set up the animation
     now = time.time()
-    animation = FuncAnimation(fig, update, frames=200, interval=10, blit=False)
+    start = time.time()
+    animation = FuncAnimation(fig, update, frames=200, interval=1, blit=False)
     plt.show()
 
+
+count = 0
 now = time.time()
+start = time.time()
 plot_swarm()

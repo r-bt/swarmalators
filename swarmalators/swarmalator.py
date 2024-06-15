@@ -1,9 +1,17 @@
 import numpy as np
 import time
 
+
 class Swarmalator:
 
-    def __init__(self, agents: int, K: int, J: int, A:int = 1, B:int = 1):
+    def __init__(
+        self,
+        agents: int,
+        K: int,
+        J: int,
+        chiral: bool = False,
+        target: np.ndarray = None,
+    ):
         """
         Intialize swarmalator model
 
@@ -14,113 +22,187 @@ class Swarmalator:
         K : int
             Phase coupling coefficient
         J: int
-            Spatial-phase interaction coeffi- cient 
-        positions: list
-            Initial positions of all the agents
+            Spatial-phase interaction coeffi- cient
+        chiral: bool
+            Whether to include chiral contributions
+        target: np.ndarray
+            Target position for the agents
         """
-        np.random.seed(0) # Debug have the same random numbers
+        np.random.seed(0)  # Debug have the same random numbers
 
         self._agents = agents
+
+        # Setup base simulation parameters
         self._K = K
         self._J = J
-        self._A = A
-        self._B = B
+        self._A = 1  # Ensures that agents do not dissipate infinitely
+        self._B = 1  # Ensures that agents do not aggregate at a single point in space.
 
-        # Init positon state
-        self.inherent_velocity = np.random.rand(self._agents, 2) 
-        self.inherent_velocity[:, 0] = 0 # Inherent velocity in x-dir
-        self.inherent_velocity[:, 1] = 0 # Inherent velocity in y-dir
+        # Agents have an inherent velocity
+        self._inherent_velocities = np.zeros((self._agents, 2))
 
-        self.velocity = np.zeros((self._agents, 2))
+        # Agents have a natural frequency
+        self._natural_frequencies = np.zeros(self._agents)
 
-        half_len = self._agents // 2
+        # Agents might have a chiral contribution
+        self._chiral = chiral
+        self._c = np.ones((self._agents, 1))
 
-        self.c = np.random.rand(self._agents, 1)
+        # Agents might have a target
+        if target is not None:
+            self._target = np.array([target])
+            assert self._target.shape == (1, 2), "Target must be of shape (1, 2)"
+        else:
+            self._target = None
 
-        self._chiral = False # Whether to do chiral behaviours
+        # All agents start stationary
+        self._velocity = np.zeros((self._agents, 2))
 
-        self.c[:half_len, 0] = 0.5
-        self.c[half_len:, 0] = -0.5
-        
-        # Init phase state (0 is natural freuqnecy, 1 is phase)
-        self.phase_state = np.random.rand(self._agents, 2)
-
-        # half_len = len(self.phase_state) // 2
-        self.phase_state[:half_len, 0] = 0
-        self.phase_state[half_len:, 0] = 0
-        # self.phase_state[:, 0] = 1/
-        # self.phase_state[:, 1] *= 2*np.pi
-        self.phase_state[:, 1] = np.linspace(0, 2 * np.pi, self._agents, endpoint=False)
-
-        # Keep track of time between updates
-        self._updated = time.time()
+        # All agents start with a phase
+        self._phase = np.linspace(0, 2 * np.pi, self._agents, endpoint=False)
+        self._delta_phase = np.zeros(self._agents)
 
     def update(self, positions):
         """
         Perform one tick update of swarmalator model
 
-        Note: We perform using matrix multiplication since numpy supports vectorization and is faster than for loops
+        Unlike the Matlab implementation we use numpy matrix operations for faster computation. This allows
+        for higher performance and scalability especially when dealing with large number of agents.
+
+        However, it makes the code harder to understand and debug.
         """
 
-        # Calculate x_j - x_i and |x_j = x_i|
-        vectors = positions[:, :2] - positions[:, :2][:, np.newaxis]
+        Js = self._J if self._target is None else self._get_J_values(positions)
+
+        # Calculate x_j - x_i, mulitply by -1 since we are doing x_i = x_j but we want x_j - x_i
+        vectors = positions - positions[:, np.newaxis]
+
+        # Calculate |x_j = x_i|
         distances = np.linalg.norm(vectors, axis=2)
+        np.fill_diagonal(distances, 1)  # Avoid division by zero
 
-        np.fill_diagonal(distances, 1e-6) # Avoid division by zero
+        # Calculate the phase difference, multiply by -1 since we are doing x_i = x_j but we want x_j - x_i
+        phase_difference = -1 * np.subtract.outer(self._phase, self._phase)
 
-        # Calculate the phase difference
-        # Note: Multiply by -1 since we are doing x_i = x_j but we want x_j - x_i
-        phase_difference = -1 * np.subtract.outer(self.phase_state[:, 1], self.phase_state[:, 1])
-
-        # Calculate Q terms
-        natural_frequencies = self.phase_state[:, 0]
-        phase_normalized = natural_frequencies / np.absolute(natural_frequencies)
-        phase_normalized = np.nan_to_num(phase_normalized)
-
-        Q_x = (np.pi / 2) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
-        Q_theta = (np.pi / 4) * np.absolute(np.subtract.outer(phase_normalized, phase_normalized))
-
-        if not self._chiral:
-            Q_x = 0
-            Q_theta = 0
+        # If chiral is enabled calculate Q_x and Q_theta
+        Q_x, Q_theta = self._get_phase_offset_terms() if self._chiral else (0, 0)
 
         # Calculate cos and sin terms
-
         phase_cos_difference = np.cos(phase_difference - Q_x)
         phase_sin_difference = np.sin(phase_difference - Q_theta)
 
-        # Calculate velocity contributions
-        velocity_contributions = (self._A + self._J * phase_cos_difference[:, :, np.newaxis]) * vectors / distances[:, :, np.newaxis] - self._B * vectors / np.square(distances[:, :, np.newaxis])
+        # Calculate the updated velocity
+        self._velocity = self._calculate_velocity(
+            vectors, distances, phase_cos_difference, Js
+        )
 
-        # Calculate chiral contribution
-        chiral_contribtuion = self.c * np.stack([np.cos(self.phase_state[:, 1] + np.pi/2), np.sin(self.phase_state[:, 1] + np.pi / 2)], axis=1)
+        # Calculate the updated phase
+        self._delta_phase = self._calculate_delta_phase(phase_sin_difference, distances)
 
-        if not self._chiral:
-            chiral_contribtuion = 0
+    def update_phase(self, deltaT):
+        # Apply the updated phase
+        self._phase += self._delta_phase * deltaT
+        self._phase %= 2 * np.pi
 
-        # Calculate velocity and delta_phase
-        velocity = chiral_contribtuion + 1/self._agents * np.sum(velocity_contributions, axis=1)
-        delta_phase = self.phase_state[:, 0] + (self._K / self._agents) * np.sum(phase_sin_difference / distances, axis=1)
+    def _calculate_delta_phase(self, phase_sin_difference, distances):
+        """
+        Calculates the delta phase as:
 
-        print(phase_sin_difference)
+        θ_i = ω_i + (K/N) * Σ_j[ sin(θ_j - θ_i - Q_theta) / |(x_j - x_i)| ]
+        """
 
-        # Update phase and velocity
-        self.phase_state[:, 1] += delta_phase * (time.time() - self._updated)
-        self.velocity = velocity
+        delta_phase = self._natural_frequencies + (self._K / self._agents) * np.sum(
+            phase_sin_difference / distances, axis=1
+        )
 
-        self._updated = time.time()
-        self.phase_state[:, 1] %= 2 * np.pi
-    
+        return delta_phase
+
+    def _calculate_velocity(self, vectors, distances, phase_cos_difference, Js):
+        """
+        Calculates the velocity as:
+
+        ẋ_i = v_i + 1/N * Σ_j[ ((x_j - x_i) / |(x_j - x_i)|) * (A + J * cos(θ_j - θ_i - Q_x)) - B * (x_j - x_i) / |(x_j - x_i)|^2 ]
+        """
+
+        # Calculate normalized_vectors and normalized_vectors_squared
+        normalized_vectors = vectors / distances[:, :, np.newaxis]
+        normalized_vectors_squared = vectors / np.square(distances[:, :, np.newaxis])
+
+        # Scale the phase_cos_difference by J and add A
+        scaled_phase_cos_difference = self._A + Js * phase_cos_difference
+
+        # Get the velocity contributions
+        velocity_contributions = (
+            scaled_phase_cos_difference[:, :, np.newaxis] * normalized_vectors
+            - self._B * normalized_vectors_squared
+        )
+
+        # If chiral is enabled calculate the chiral contribution as inherent velocities
+        inherent_velocities = self._inherent_velocities
+
+        if self._chiral:
+            inherent_velocities = self._c * np.stack(
+                [
+                    np.cos(self._phase + np.pi / 2),
+                    np.sin(self._phase + np.pi / 2),
+                ],
+                axis=1,
+            )
+
+        velocity = inherent_velocities + 1 / self._agents * np.sum(
+            velocity_contributions, axis=1
+        )
+
+        return velocity
+
+    def _get_J_values(self, positions: np.ndarray):
+        """
+        If agents have a target position the J1 values are calculated based on the distance to the target
+        """
+
+        # Target is (2,) while positions is (agents, 2) so we need to broadcast to perform the subtraction
+        distToTargetVector = self._target[0, :2] - positions[:, :2][:, np.newaxis]
+
+        # Calculate the distance to the target
+        distToTarget = np.linalg.norm(distToTargetVector, axis=2)
+
+        # Calculate the min and max distance to the target
+        minDistToTarget = np.min(distToTarget)
+        maxDistToTarget = np.max(distToTarget)
+
+        J_values = (
+            self._A
+            * (np.absolute(distToTarget - minDistToTarget))
+            / (maxDistToTarget - minDistToTarget)
+        )
+
+        return J_values
+
+    def _get_phase_offset_terms(self):
+        """
+        Calculates Q_x and Q_theta which enable frequency coupling
+        """
+
+        natural_frequency_normalized = np.nan_to_num(
+            self._natural_frequencies / np.absolute(self._natural_frequencies)
+        )
+
+        Q_x = (np.pi / 2) * np.absolute(
+            np.subtract.outer(
+                natural_frequency_normalized, natural_frequency_normalized
+            )
+        )
+
+        Q_theta = (np.pi / 4) * np.absolute(
+            np.subtract.outer(
+                natural_frequency_normalized, natural_frequency_normalized
+            )
+        )
+
+        return Q_x, Q_theta
+
     def get_phase_state(self):
-        return self.phase_state
-    
+        return self._phase
+
     def get_velocity(self):
-        return self.velocity
-
-
-
-
-
-       
-
-
+        return self._velocity

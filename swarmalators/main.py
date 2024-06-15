@@ -14,7 +14,7 @@ import os
 ## NOTE: MODIFY TO THE PORTs ON YOUR COMPUTER FOR THE NRF5340
 is_windows = os.name == "nt"
 PORT1 = "/dev/tty.usbmodem0010500530493" if not is_windows else "COM7"
-PORT2 = "/dev/tty.usbmodem0010500746993" if not is_windows else "COM6"
+PORT2 = "/dev/tty.usbmodem0010500746993" if not is_windows else "COM9"
 
 MAX_SPHEROS_PER_SWARMALATOR = 15
 
@@ -178,6 +178,7 @@ def main():
     nrf_swarmalator_1 = nRFSwarmalator(spheros_new, PORT1)
     nrf_swarmalator_2 = nRFSwarmalator(spheros_old, PORT2)
 
+    # Specify the NORDIC boards to be used
     swarmalators = [nrf_swarmalator_1, nrf_swarmalator_2]
 
     for swarmalator in swarmalators:
@@ -284,6 +285,7 @@ def main():
                     continue
 
                 swarmalator.update(positions[:, :2])
+                swarmalator.update_phase(time.monotonic() - now)
 
                 phase_state = swarmalator.get_phase_state()
                 velocities = swarmalator.get_velocity()
