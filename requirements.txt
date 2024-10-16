@@ -25,8 +25,12 @@ numpy==1.25.2
 opencv-python==4.8.0.76
 packaging==23.1
 Pillow==10.0.0
-pupil-labs-uvc==1.0.0rc1
+pupil_labs_uvc==1.0.0b7
 Pygments==2.16.1
+pyobjc-core==9.2
+pyobjc-framework-Cocoa==9.2
+pyobjc-framework-CoreBluetooth==9.2
+pyobjc-framework-libdispatch==9.2
 pyparsing==3.0.9
 pyserial==3.5
 python-dateutil==2.8.2

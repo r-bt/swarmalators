@@ -155,7 +155,7 @@ def main():
     #             exit(1)
 
     direction_camera = CameraSpec(
-        uid="2:1",
+        uid="2:5",
         width=1920,
         height=1080,
         fps=30,
@@ -163,7 +163,7 @@ def main():
     )
 
     tracker_camera = CameraSpec(
-        uid="2:2",
+        uid="2:6",
         width=1920,
         height=1080,
         fps=30,
