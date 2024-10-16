@@ -1,9 +1,10 @@
 import cv2
-from ._video_stream import VideoStream, CameraSpec
+from ._video_stream import VideoStream
 from .util._c930e import CameraControls
 import numpy as np
 
 CONTOUR_DISTANCE_THRESHOLD = 350
+
 
 class DirectionFinder:
     """
@@ -24,9 +25,9 @@ class DirectionFinder:
         focus=0,
     )
 
-    def __init__(self, device: CameraSpec):
+    def __init__(self, device: int):
         # Get camera on OpenCV
-        self.stream = VideoStream(device).start()
+        self.stream = VideoStream(device, "default_camera.json").start()
         # Store history of frames for direction finding
         self.history = []
 
@@ -75,11 +76,13 @@ class DirectionFinder:
             cX_head = M_head["m10"] / M_head["m00"]
             cY_head = M_head["m01"] / M_head["m00"]
             # Check distance between this and the base contour
-            if (cX_head - cX_base)**2 + (cY_head - cY_base)**2 < CONTOUR_DISTANCE_THRESHOLD:
+            if (cX_head - cX_base) ** 2 + (
+                cY_head - cY_base
+            ) ** 2 < CONTOUR_DISTANCE_THRESHOLD:
                 break
         else:
             print("Failed to find head contour")
-            
+
             while True:
                 frame2 = self.stream.read()
                 cv2.imshow("Frame", frame2)
@@ -182,7 +185,7 @@ class DirectionFinder:
             raise RuntimeError("Failed to find a sphero")
 
         return box
-    
+
     def debug_show_boxes(self, boxes):
 
         while True:
@@ -199,7 +202,7 @@ class DirectionFinder:
                 h = y_2 - y
 
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            
+
             cv2.imshow("Frame", frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):

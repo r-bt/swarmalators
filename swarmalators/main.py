@@ -1,5 +1,5 @@
 import time
-from tracker import Tracker, DirectionFinder, CameraSpec
+from tracker import Tracker, DirectionFinder
 from nRFSwarmalator import nRFSwarmalator
 import pdb
 import numpy as np
@@ -17,6 +17,8 @@ PORT1 = "/dev/tty.usbmodem0010500530493" if not is_windows else "COM7"
 PORT2 = "/dev/tty.usbmodem0010500746993" if not is_windows else "COM9"
 
 MAX_SPHEROS_PER_SWARMALATOR = 15
+
+CAMERA_INDEX = 0
 
 
 def init_spheros(
@@ -154,24 +156,8 @@ def main():
     #             print("No tracking camera found!")
     #             exit(1)
 
-    direction_camera = CameraSpec(
-        uid="2:5",
-        width=1920,
-        height=1080,
-        fps=30,
-        bandwidth_factor=1.6,
-    )
-
-    tracker_camera = CameraSpec(
-        uid="2:6",
-        width=1920,
-        height=1080,
-        fps=30,
-        bandwidth_factor=1.6,
-    )
-
     # Start the direction finder
-    direction_finder = DirectionFinder(direction_camera)
+    direction_finder = DirectionFinder(CAMERA_INDEX)
 
     # Start connects to Nordic boards
 
@@ -204,7 +190,7 @@ def main():
 
     print("Init tracker")
 
-    tracker.start_tracking_objects(tracker_camera, len(boxes), boxes)
+    tracker.start_tracking_objects(CAMERA_INDEX, len(boxes), boxes)
 
     print("Started tracking")
 
